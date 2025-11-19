@@ -18,6 +18,8 @@ class ConcreteData(BasePhysics):
     deg_hydr_max: float = 0.875  # [-]
     eta: float = 5.554  # [-]
 
+    cem: float = 300.0  # [kg/m^3]
+
     @property
     def Ea(self) -> float:
         return 5.653 * self.R  # [J/mol]
