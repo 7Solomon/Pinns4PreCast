@@ -1,5 +1,6 @@
 from pina import Trainer
 from pina.optim import TorchOptimizer
+from pina.optim import TorchScheduler
 import torch.nn as nn
 import torch
 from torch.utils.data import DataLoader
@@ -20,11 +21,11 @@ print(f"Using device: {device}")
 
 def defineFlexDeepONet(n_bc_sensor_points, n_ic_sensor_points): 
     branch_configs = [
-        {'input_size': n_bc_sensor_points, 'hidden_layers': [128, 128]},
-        {'input_size': n_ic_sensor_points, 'hidden_layers': [128, 128]}
+        {'input_size': n_bc_sensor_points, 'hidden_layers': [256, 256, 256]},
+        {'input_size': n_ic_sensor_points, 'hidden_layers': [256, 256, 256]}
     ]
     
-    trunk_config = {'input_size': 4, 'hidden_layers': [128, 128]}  # x,y,z,t
+    trunk_config = {'input_size': 4, 'hidden_layers': [256, 256, 256]}  # x,y,z,t
    
     model = FlexDeepONet(
         branch_configs=branch_configs,
@@ -38,22 +39,8 @@ def defineFlexDeepONet(n_bc_sensor_points, n_ic_sensor_points):
     
     return model, problem
 
-def trainFlexDeepONet(model, problem):   
-    #n_pde, n_ic, n_bc_face = 500, 100, 50
-   # batch_size = 32
 
-    optimizer = TorchOptimizer(torch.optim.Adam, lr=1e-3)
-    solver = DeepONetSolver(
-        problem=problem,
-        model=model,
-        optimizer=optimizer,
-    )
-    
-    trainer = Trainer(solver, max_epochs=1000, accelerator='gpu')
-    trainer.train()
-
-
-def define_trainFlexDeepONet_with_lightning(model, problem):  # benutzt nicht Trainer von PINA
+def define_training_pipeline(model, problem):  # benutzt nicht Trainer von PINA
     n_pde, n_ic, n_bc_face = 500, 100, 50
     batch_size = 32
     num_samples = 10000  # Total training samples
@@ -64,8 +51,8 @@ def define_trainFlexDeepONet_with_lightning(model, problem):  # benutzt nicht Tr
         n_ic=n_ic,
         n_bc_face=n_bc_face,
         num_samples=num_samples,
-        num_sensors=100,
-        device=device
+        num_sensors_bc=100,
+        num_sensors_ic=100
     )
     
     # Create dataloader
@@ -74,13 +61,22 @@ def define_trainFlexDeepONet_with_lightning(model, problem):  # benutzt nicht Tr
         batch_size=batch_size,
         shuffle=True,
         collate_fn=deeponet_collate_fn,
-        num_workers=0  # CAN BE CHAGNED JUST FOR DEBUGGING
+        num_workers=91  # CAN BE CHAGNED JUST FOR DEBUGGING
     ) 
     optimizer = TorchOptimizer(torch.optim.Adam, lr=1e-3)
+    scheduler = TorchScheduler(
+        torch.optim.lr_scheduler.ReduceLROnPlateau,
+        mode='min',
+        factor=0.5,
+        patience=15,
+    )
+
     solver = DeepONetSolver(
         problem=problem,
         model=model,
         optimizer=optimizer,
+        scheduler=scheduler,
+        loss_weights={'physics': 1.0, 'bc': 10.0, 'ic': 10.0}
     )
     return solver, train_loader, train_dataset
 
@@ -104,8 +100,8 @@ def train(solver, train_loader):
         filename='deeponet-{epoch:02d}',#-{oss:.4f}',
         monitor='loss',
         mode='min',
-        save_top_k=3,  # Keep top 3 models
-        save_last=True,  # Also save the last checkpoint
+        save_top_k=3,          # Keep top 3 models
+        save_last=True,        # Also save the last checkpoint
         verbose=True
     )
     logger = TensorBoardLogger(
@@ -114,7 +110,7 @@ def train(solver, train_loader):
     )
     
     trainer = pl.Trainer(
-        max_epochs=6,
+        max_epochs=100,
         accelerator='gpu',
         devices=1,
         logger=logger,
@@ -132,9 +128,10 @@ def train(solver, train_loader):
 if __name__ == "__main__":
     n_bc_sensor_points = 100
     n_ic_sensor_points = 100
+    idx_path = None
 
     model, problem = defineFlexDeepONet(n_bc_sensor_points, n_ic_sensor_points)
-    solver, train_loader, train_dataset = define_trainFlexDeepONet_with_lightning(model, problem)
+    solver, train_loader, train_dataset = define_training_pipeline(model, problem)
     trainer, idx_path = train(solver, train_loader)
 
     predictions, coords = testFlexDeepONet(

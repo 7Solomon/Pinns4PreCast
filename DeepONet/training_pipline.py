@@ -19,7 +19,7 @@ class DeepONetSolver(SingleSolverInterface):
         model,
         optimizer=None,
         scheduler=None,
-        loss_weights={'data': 1.0, 'physics': 1.0}
+        loss_weights={'physics': 1.0, 'bc': 1.0, 'ic': 1.0}
     ):
         """
         Args:
@@ -153,8 +153,8 @@ class DeepONetSolver(SingleSolverInterface):
         pred_alpha = predictions[..., 1]  # Degree of hydration
         
         # IC losses
-        loss_T = torch.nn.functional.mse_loss(pred_T, ic_target)
-        loss_alpha = torch.nn.functional.mse_loss(pred_alpha, torch.zeros_like(pred_alpha))
+        loss_T = torch.nn.functional.mse_loss(pred_T, ic_target[..., 0])        
+        loss_alpha = torch.nn.functional.mse_loss(pred_alpha, ic_target[..., 1])
         
         return loss_T + loss_alpha
     
@@ -188,38 +188,78 @@ class DeepONetSolver(SingleSolverInterface):
         """
         Single training step combining data + physics losses.
         """
-        #loss_d = self.loss_data(batch)
+        # Calculate all losses
         loss_p = self.loss_phys(batch)
+        loss_b = self.loss_bc(batch)
+        loss_i = self.loss_ic(batch)
         
+        # Combine losses
         total_loss = (
-        #    self.loss_weights['data'] * loss_d +
-            self.loss_weights['physics'] * loss_p
+            self.loss_weights.get('physics', 1.0) * loss_p + 
+            self.loss_weights.get('bc', 1.0) * loss_b + 
+            self.loss_weights.get('ic', 1.0) * loss_i
         )
         
         # Log losses
-        #self.log('loss_data', loss_d)
         self.log('loss_physics', loss_p)
-        self.log('loss', total_loss)
-        #if batch_idx % 10 == 0:
-        #    print(f'Train Step {batch_idx}, Loss: {total_loss.item():.6f}')
+        self.log('loss_bc', loss_b)
+        self.log('loss_ic', loss_i)
         
+        self.log('loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
         return total_loss
     
     def validation_step(self, batch, batch_idx):
         """
         Validation step.
         """
-        #loss_d = self.loss_data(batch)
         loss_p = self.loss_phys(batch)
+        loss_b = self.loss_bc(batch)
+        loss_i = self.loss_ic(batch)
         
         total_loss = (
-        #    self.loss_weights['data'] * loss_d +
-            self.loss_weights['physics'] * loss_p
+            self.loss_weights['physics'] * loss_p + 
+            loss_b + 
+            loss_i
         )
         
-        #self.log('val_loss_data', loss_d)
         self.log('val_loss_physics', loss_p)
-        self.log('val_loss', total_loss)
+        self.log('val_loss_bc', loss_b)
+        self.log('val_loss_ic', loss_i)
+
+        self.log('loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         
         return total_loss
     
+    def configure_optimizers(self):
+        """
+        Override configure_optimizers to support ReduceLROnPlateau.
+        """
+        optimizer_class = self.optimizer.optimizer_class
+        optimizer_kwargs = self.optimizer.kwargs
+        
+        opt = optimizer_class(self.model.parameters(), **optimizer_kwargs)       
+        
+        if self.scheduler is None:
+            return opt
+        
+        scheduler_class = self.scheduler.scheduler_class
+        scheduler_kwargs = self.scheduler.kwargs
+        
+        sched = scheduler_class(opt, **scheduler_kwargs)
+        
+        # Check if we are using ReduceLROnPlateau
+        if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            return {
+                "optimizer": opt,
+                "lr_scheduler": {
+                    "scheduler": sched,
+                    "monitor": "loss_epoch",
+                    "interval": "epoch",
+                    "frequency": 1
+                }
+            }
+            
+        return [opt], [sched]
+    
+

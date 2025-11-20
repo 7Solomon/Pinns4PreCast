@@ -3,7 +3,7 @@ import torch
 from scipy.stats import qmc
 
 
-from DeepONet.data_loader import eval_temperature_bc, eval_temperature_ic, sample_temperature_bc_params, sample_temperature_ic_params
+from DeepONet.data_loader import DeepONetDataset, eval_temperature_bc, eval_temperature_ic, sample_temperature_bc_params, sample_temperature_ic_params
 from DeepONet.vis import create_unified_interactive_viz_v2, create_vis_loss_history, create_vis_on_sensor_points, export_to_vtk_series, export_sensors_to_csv
 from domain import DomainVariables
 from material import ConcreteData
@@ -60,8 +60,8 @@ def testFlexDeepONet(solver, idx_path=None,
     """
     # Load checkpoint if provided
     if idx_path is None:
-        content_dir = os.listdir(os.path.join('content', 'checkpoints'))
-        idx_path = os.path.join('content', 'checkpoints', content_dir[-1])
+        content_dir = os.listdir(os.path.join('content'))
+        idx_path = os.path.join('content', content_dir[-1])
 
     dir = os.listdir(os.path.join(idx_path, 'checkpoints'))
     print(f"Loading checkpoint from: {os.path.join(idx_path, 'checkpoints', dir[-1])}")
@@ -77,50 +77,46 @@ def testFlexDeepONet(solver, idx_path=None,
     print(f"Running inference on device: {device}")
     
     with torch.no_grad():
-        # Generate BC and IC sensor data (1 sample for testing)
-        amp, phase, offset = sample_temperature_bc_params(1, device=device)
-        T0 = sample_temperature_ic_params(1, device=device)
+        ds = DeepONetDataset(
+            problem=solver.problem,
+            n_pde=1,      # NOT NEEDED beause 
+            n_ic=1,       # NOT NEEDED
+            n_bc_face=1,  # SAME
+            num_samples=1,
+            num_sensors=num_sensors,
+        )
         
-        sensor_locations = torch.linspace(0, 1, num_sensors, device=device).unsqueeze(0)
-        bc_sensors = eval_temperature_bc(sensor_locations, amp, phase, offset)  # [1, num_sensors]
-        ic_sensors = eval_temperature_ic(sensor_locations, T0)  # [1, num_sensors]
+        sample = ds[0]
+        bc_sensors = sample['bc_sensors'].unsqueeze(0)
+        ic_sensors = sample['ic_sensors'].unsqueeze(0)
 
-        print(f"\nBC sensors shape: {bc_sensors.shape}")
-        print(f"IC sensors shape: {ic_sensors.shape}")
-        print(f"BC sample values: {bc_sensors[0, :5]} ... {bc_sensors[0, -5:]}")
-        print(f"IC sample values: {ic_sensors[0, :5]} ... {ic_sensors[0, -5:]}")
         
-        # Create structured test grid
+        # BECAUSE WE LIKE STRUTURED GRID FOR CHECKING
         test_coords = create_test_grid(
             spatial_domain=[domain_vars.x, domain_vars.y, domain_vars.z], 
             time_domain=domain_vars.t,
             n_spatial=n_spatial,
             n_time=n_time
         ).to(device)
-        
-        print(f"\nTest coordinates shape: {test_coords.shape}")
-        print(f"Total points: {test_coords.shape[0]}")
-        print(f"Sample coordinates:\n{test_coords[:5]}\n...\n{test_coords[-5:]}")
 
-        # Add batch dimension to test_coords: [1, num_points, 4]
+        # batch dimension to test_coords [1, num_points, 4]
         test_coords_batched = test_coords.unsqueeze(0)
         
-        # Create batch dict for inference
+        # DICT
         test_batch = {
             'bc_sensors': bc_sensors,  # [1, num_sensors]
             'ic_sensors': ic_sensors,  # [1, num_sensors]
             'query_coords': test_coords_batched  # [1, num_points, 4]
         }
         
-        # Make predictions using the solver's forward method
-        print("\nRunning forward pass...")
+        print("\nForward...")
         predictions = solver.forward(test_batch)  # [1, num_points, 2]
         predictions = predictions.squeeze(0)  # [num_points, 2]
 
         # Unscale predictions
         predictions_unscaled = predictions.clone()
         predictions_unscaled[:, 0] = unscale_T(predictions[:, 0]) - 273.15
-        predictions_unscaled[:, 1] = unscale_alpha(predictions[:, 1])
+        predictions_unscaled[:, 1] = predictions[:, 1]#unscale_alpha(predictions[:, 1])
 
         print(f"\nPredictions shape: {predictions_unscaled.shape}")
         print(f"Temperature range: [{predictions_unscaled[:, 0].min():.4f}, {predictions_unscaled[:, 0].max():.4f}] C")
@@ -138,14 +134,4 @@ def testFlexDeepONet(solver, idx_path=None,
             test_coords.cpu(),
             idx_path=idx_path
         )
-        #create_unified_interactive_viz_v2(
-        #    predictions_unscaled.cpu(), 
-        #    test_coords.cpu(), 
-        #    bc_samples=bc_sensors.cpu(), 
-        #    ic_samples=ic_sensors.cpu()
-        #)
-        #create_vis_on_sensor_points(predictions_unscaled.cpu(), test_coords.cpu())
-        #create_vis_loss_history()
-        
-        
         return predictions_unscaled, test_coords

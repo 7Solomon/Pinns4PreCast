@@ -27,15 +27,16 @@ class DeepONetDataset(Dataset):
     """
     A map-style dataset for Physics-Informed DeepONet.
     """
-    def __init__(self, problem, n_pde, n_ic, n_bc_face, num_samples, num_sensors=100, device='cpu'):
+    def __init__(self, problem, n_pde, n_ic, n_bc_face, num_samples, num_sensors_bc, num_sensors_ic):
         self.problem = problem
         self.n_pde = n_pde
         self.n_ic = n_ic
         self.n_bc_face = n_bc_face
         self.num_samples = num_samples
-        self.num_sensors = num_sensors
+        self.num_sensors_bc = num_sensors_bc
+        self.num_sensors_ic = num_sensors_ic
         self.boundary_faces = ["left", "right", "bottom", "top", "front", "back"]
-        self.device = device
+        #self.device = device   # REMOVED BECAUS THEN I CAN MAKE NUMM OF WORKERS >0
 
     def __len__(self):
         return self.num_samples
@@ -44,36 +45,43 @@ class DeepONetDataset(Dataset):
         amp, phase, offset = sample_temperature_bc_params(1, device='cpu')  # FIRST CPU THEN CUDA AT THE END, bECAUSE PINAD WEIRD ON CPU
         T0 = sample_temperature_ic_params(1, device='cpu')
         
-        sensor_locations = torch.linspace(0, 1, self.num_sensors, device='cpu').unsqueeze(0)
-        bc_sensors = eval_temperature_bc(sensor_locations, amp, phase, offset).squeeze(0)
-        ic_sensors = eval_temperature_ic(sensor_locations, T0).squeeze(0)
+        sensor_locations_bc = torch.linspace(0, 1, self.num_sensors_bc, device='cpu').unsqueeze(0)   # JUST POSSIBLE BECAUS OF SCALINTG
+        sensor_locations_ic = torch.linspace(0, 1, self.num_sensors_ic, device='cpu').unsqueeze(0)    # SAME !!!!!!!!!
+        bc_sensors = eval_temperature_bc(sensor_locations_bc, amp, phase, offset).squeeze(0)
+        ic_sensors = eval_temperature_ic(sensor_locations_ic, T0).squeeze(0)
 
         pde_pts = self.problem.domain["D"].sample(n=self.n_pde)
         ic_pts = self.problem.domain["initial"].sample(n=self.n_ic)
         bc_pts_list = [self.problem.domain[face].sample(n=self.n_bc_face) for face in self.boundary_faces]
         bc_pts = LabelTensor.cat(bc_pts_list)
 
-        x_ic = ic_pts.extract(['x']).unsqueeze(0)
-        ic_T_vals = eval_temperature_ic(x_ic, T0).squeeze(0)
+        # x_ic shape is [N, 1], T0 is [1, 1]
+        x_ic = ic_pts.extract(['x']) 
+        
+        # squeeze(-1) turns [N, 1] into [N]
+        ic_T_vals = eval_temperature_ic(x_ic, T0).squeeze(-1)
+        
         ic_alpha_vals = torch.ones_like(ic_T_vals) * 1e-6
-        ic_vals = torch.stack([ic_T_vals, ic_alpha_vals], dim=-1)  # Stack T and alpha
+        ic_vals = torch.stack([ic_T_vals, ic_alpha_vals], dim=-1)  # [N, 2]
 
-        x_bc = bc_pts.extract(['x']).unsqueeze(0)
-        bc_T_vals = eval_temperature_bc(x_bc, amp, phase, offset).squeeze(0)
+        x_bc = bc_pts.extract(['x'])
+        
+        # squeeze(-1) turns [N, 1] into [N]
+        bc_T_vals = eval_temperature_bc(x_bc, amp, phase, offset).squeeze(-1)
 
         # Convert target values to regular tensors
         ic_vals = ic_vals.as_subclass(torch.Tensor) if isinstance(ic_vals, LabelTensor) else ic_vals
         bc_T_vals = bc_T_vals.as_subclass(torch.Tensor) if isinstance(bc_T_vals, LabelTensor) else bc_T_vals
 
-        # MOVE TO DEVICE IF NEEDED
-        if self.device != 'cpu':
-            bc_sensors = bc_sensors.to(self.device)
-            ic_sensors = ic_sensors.to(self.device)
-            pde_pts = pde_pts.to(self.device)
-            ic_pts = ic_pts.to(self.device)
-            bc_pts = bc_pts.to(self.device)
-            ic_vals = ic_vals.to(self.device)
-            bc_T_vals = bc_T_vals.to(self.device)
+        # MOVE TO DEVICE IF NEEDED   ## SAME DELETE REASON NUM WROKERS GO brrrrrr
+        #if self.device != 'cpu':
+        #    bc_sensors = bc_sensors.to(self.device)
+        #    ic_sensors = ic_sensors.to(self.device)
+        #    pde_pts = pde_pts.to(self.device)
+        #    ic_pts = ic_pts.to(self.device)
+        #    bc_pts = bc_pts.to(self.device)
+        #    ic_vals = ic_vals.to(self.device)
+        #    bc_T_vals = bc_T_vals.to(self.device)
 
 
         return {
@@ -86,10 +94,6 @@ class DeepONetDataset(Dataset):
             "bc_target": bc_T_vals,    # (n_bc_total,) - Temperature values
         }
     
-
-###
-##
-##
 
 def deeponet_collate_fn(batch):
     """Custom collate function to batch LabelTensor objects."""

@@ -333,60 +333,62 @@ def export_to_vtk_series(predictions, test_coords, idx_path=None):
         f.write("\n".join(pvd_lines))
         
     print(f"Done. Open '{os.path.join(output_folder, 'results.pvd')}' in ParaView.")
-
-
 def export_sensors_to_csv(predictions, test_coords, idx_path=None):
     """
-    Interpolates data at sensor locations for all time steps and saves to CSV.
+    Interpolates data at sensor locations for all time steps and saves two CSVs:
+    - sensors_temperature.csv (Time_s, Time_h, <sensor>_Temp...)
+    - sensors_alpha.csv       (Time_s, Time_h, <sensor>_Alpha...)
     """
     if idx_path is None:
         content_dir = os.listdir(os.path.join('content'))
         if not content_dir:
             raise ValueError("No content directory found for exporting VTK files.")
         idx_path = os.path.join('content', content_dir[-1])
-    output_file = os.path.join(idx_path, "sensors_interpolated.csv")
+
+    output_temp = os.path.join(idx_path, "sensors_temperature.csv")
+    output_alpha = os.path.join(idx_path, "sensors_alpha.csv")
 
     all_times = np.unique(test_coords[:, 3])
     all_times.sort()
-    
-    # Prepare header
-    header = ["Time_s", "Time_h"]
+
     sensor_ids = list(domain_vars.TEMP_SENS_POINTS.keys())
-    for sid in sensor_ids:
-        header.append(f"{sid}_Temp")
-        header.append(f"{sid}_Alpha")
-    
-    # Collect data rows
-    rows = []
-    
-    print(f"Interpolating sensors for CSV export...")
-    
+
+    header_temp = ["Time_s", "Time_h"] + [f"{sid}_Temp" for sid in sensor_ids]
+    header_alpha = ["Time_s", "Time_h"] + [f"{sid}_Alpha" for sid in sensor_ids]
+
+    rows_temp = []
+    rows_alpha = []
+
+    print(f"Interpolating sensors for CSV export ({len(all_times)} timesteps, {len(sensor_ids)} sensors)...")
+
     for t in all_times:
-        row = [t, t/3600.0]
-        
-        # Get field data for this timestep
         mask_t = np.isclose(test_coords[:, 3], t)
         coords_t = test_coords[mask_t, :3]
         pred_t = predictions[mask_t]
-        
+
+        temp_row = [t, t / 3600.0]
+        alpha_row = [t, t / 3600.0]
+
         for sid in sensor_ids:
             point = domain_vars.TEMP_SENS_POINTS[sid]
-            
-            # Interpolate
+
             temp_val = griddata(coords_t, pred_t[:, 0], point, method='linear')
             alpha_val = griddata(coords_t, pred_t[:, 1], point, method='linear')
-            
-            # Fallback to nearest if linear fails (e.g. point on boundary)
+
             if np.isnan(temp_val):
                 temp_val = griddata(coords_t, pred_t[:, 0], point, method='nearest')
             if np.isnan(alpha_val):
                 alpha_val = griddata(coords_t, pred_t[:, 1], point, method='nearest')
-                
-            row.append(float(temp_val))
-            row.append(float(alpha_val))
-            
-        rows.append(row)
-        
-    # Write to CSV
-    np.savetxt(output_file, np.array(rows), delimiter=",", header=",".join(header), comments="")
-    print(f"Sensor data exported to '{output_file}'")
+
+            temp_row.append(float(temp_val))
+            alpha_row.append(float(alpha_val))
+
+        rows_temp.append(temp_row)
+        rows_alpha.append(alpha_row)
+
+    # Save CSVs
+    np.savetxt(output_temp, np.array(rows_temp), delimiter=",", header=",".join(header_temp), comments="", fmt="%.6f")
+    np.savetxt(output_alpha, np.array(rows_alpha), delimiter=",", header=",".join(header_alpha), comments="", fmt="%.6f")
+
+    print(f"Temperature sensor data exported to '{output_temp}'")
+    print(f"Alpha sensor data exported to '{output_alpha}'")

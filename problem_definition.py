@@ -23,11 +23,13 @@ def chem_affinity_ref(deg_hydration):
                 * torch.exp(-material_data.eta * deg_hydration / material_data.deg_hydr_max))
 def hydration_rate(input_, output_):
     T_unscaled = unscale_T(output_.extract(["T"]))
-    alpha_unscaled = unscale_alpha(output_.extract(["alpha"]))
-    
+    #alpha_unscaled = unscale_alpha(output_.extract(["alpha"]))
+    alpha_unscaled = output_.extract(["alpha"])
+    alpha_safe = torch.clamp(alpha_unscaled, 0.0, material_data.deg_hydr_max)
+
     exponent = -material_data.Ea * (save_inverse_T(T_unscaled) - (1/material_data.Temp_ref)) / material_data.R
     exponent = torch.clamp(exponent, min=-150, max=75)
-    return chem_affinity_ref(alpha_unscaled) * torch.exp(exponent)
+    return chem_affinity_ref(alpha_safe) * torch.exp(exponent)
 
 def alpha_pde(input_, output_):
     hydration_rate_val = hydration_rate(input_, output_)
