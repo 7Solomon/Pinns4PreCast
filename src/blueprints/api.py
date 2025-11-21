@@ -1,0 +1,119 @@
+import torch
+from flask import Blueprint, request, jsonify
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from pina.optim import TorchOptimizer
+from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import TensorBoardLogger
+import lightning.pytorch as pl
+import os
+
+from src.DeepONet.model_definition import FlexDeepONet
+from problem_definition import HeatODE
+from src.DeepONet.data_loader import DeepONetDataset
+from src.DeepONet.data_loader import deeponet_collate_fn
+from src.DeepONet.training_pipline import DeepONetSolver
+
+from src.state_management.state import State
+
+api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+
+@api_bp.route('/define_model', methods=['POST'])
+def define_model():
+    """
+    Define the FlexDeepONet model and problem instance using data from the request.
+    """
+    if State().config is None:
+        return jsonify({"error": "State not initialized. Please go to /setup first."}), 400
+
+    model = FlexDeepONet(
+        branch_configs=State().config.model.branch_configs,
+        trunk_config=State().config.model.trunk_config,
+        num_outputs=State().config.model.num_outputs,
+        latent_dim=State().config.model.latent_dim,
+        activation=State().config.model.activation
+    )
+    problem = HeatODE()
+    
+    # STATE SETTING
+    State().model = model
+    State().problem = problem
+    return jsonify({"message": "Model and problem defined successfully"})
+
+@api_bp.route('/define_training_pipeline', methods=['POST'])
+def define_training_pipeline():
+    """
+    Define the training pipeline using the model and problem stored in state.
+    """
+    if State().model is None or State().problem is None:
+        return jsonify({"error": "Model or Problem not defined in state"}), 400
+
+    
+    train_dataset = DeepONetDataset(
+        problem=State().problem,
+        n_pde=State().config.dataset.n_pde,
+        n_ic=State().config.dataset.n_ic,
+        n_bc_face=State().config.dataset.n_bc_face,
+        num_samples=State().config.dataset.num_samples,
+        num_sensors_bc=State().config.model.num_sensors_bc,
+        num_sensors_ic=State().config.model.num_sensors_ic
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=State().config.dataset.batch_size,
+        shuffle=True,
+        collate_fn=deeponet_collate_fn
+    )
+    solver = DeepONetSolver(
+        model=State().model,
+        problem=State().problem,
+        optimizer=State().config.training.optimizer,
+        scheduler=State().config.training.scheduler,
+        loss_weights=State().config.training.loss_weights
+    )
+    
+    # STATE
+    State().solver = solver
+    State().dataloader = train_loader
+    
+    return jsonify({"message": "Training pipeline created"})
+
+
+@api_bp.route('/train', methods=['POST'])
+def train():
+    if State().solver is None or State().dataloader is None:
+        return jsonify({"error": "Solver or Dataloader not defined"}), 400
+
+
+    State().directory_manager.run_idx_path = str(len(os.listdir(State().directory_manager.runs_path)) + 1)
+    os.makedirs(State().directory_manager.checkpoint_path, exist_ok=True)
+
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=State().directory_manager.checkpoint_path,
+        filename='deeponet-{epoch:02d}',
+        monitor='loss',
+        mode='min',
+        save_top_k=3,
+        save_last=True,
+        verbose=True
+    )
+    logger = TensorBoardLogger(
+        save_dir=State().directory_manager.runs_path,
+        name=State().directory_manager.log_name
+    )
+    
+    trainer = pl.Trainer(
+        max_epochs=100,
+        accelerator='gpu',
+        devices=1,
+        logger=logger,
+        callbacks=[checkpoint_callback],
+        log_every_n_steps=10,
+        enable_progress_bar=True,
+        enable_model_summary=True
+    )
+    
+    trainer.fit(State().solver, train_dataloaders=State().dataloader)
+    
+    return jsonify({"message": "Training finished", "path": State().directory_manager.run_idx_path})

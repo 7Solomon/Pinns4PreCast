@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Training Runs - PINN Dashboard{% endblock %}
+
+{% block content %}
+<div class="content-header">
+    <h1>Training Runs</h1>
+    <p>Manage and monitor your model training runs</p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>All Runs</h2>
+        <button class="btn btn-success" onclick="startNewRun()">+ New Run</button>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <p>Starting new training run...</p>
+    </div>
+
+    {% if runs %}
+    <ul class="list-unstyled">
+        {% for run in runs %}
+        <li class="list-item">
+            <span class="list-item-title">Run {{ run }}</span>
+            <a href="{{ url_for('routes.view_run', run_id=run) }}" class="btn btn-primary btn-sm">View Details</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📊</div>
+        <h3>No training runs found</h3>
+        <p>Click "New Run" to start your first training session</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function startNewRun() {
+        const loadingDiv = document.getElementById('loading');
+        loadingDiv.classList.add('active');
+
+        fetch('/api/define_model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Model defined:', data);
+                return fetch('/api/define_training_pipeline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Pipeline defined:', data);
+                return fetch('/api/train', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingDiv.classList.remove('active');
+                alert('Training started! Run ID: ' + data.path);
+                location.reload();
+            })
+            .catch(error => {
+                loadingDiv.classList.remove('active');
+                alert('Error starting training: ' + error);
+            });
+    }
+</script>
+{% endblock %}

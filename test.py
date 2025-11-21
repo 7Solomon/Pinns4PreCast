@@ -9,7 +9,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 import os
 
-from DeepONet.deepONet import FlexDeepONet
+from DeepONet.model_definition import FlexDeepONet
 from DeepONet.infrence_pipline import testFlexDeepONet
 from DeepONet.training_pipline import DeepONetSolver
 from DeepONet.data_loader import DeepONetDataset, deeponet_collate_fn
@@ -20,11 +20,12 @@ print(f"Using device: {device}")
 
 
 def defineFlexDeepONet(n_bc_sensor_points, n_ic_sensor_points): 
+
     branch_configs = [
         {'input_size': n_bc_sensor_points, 'hidden_layers': [256, 256, 256]},
         {'input_size': n_ic_sensor_points, 'hidden_layers': [256, 256, 256]}
     ]
-    
+
     trunk_config = {'input_size': 4, 'hidden_layers': [256, 256, 256]}  # x,y,z,t
    
     model = FlexDeepONet(
@@ -110,7 +111,7 @@ def train(solver, train_loader):
     )
     
     trainer = pl.Trainer(
-        max_epochs=100,
+        max_epochs=1000,
         accelerator='gpu',
         devices=1,
         logger=logger,

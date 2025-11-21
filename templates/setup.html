@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration Setup - PINN Dashboard{% endblock %}
+
+{% block content %}
+<div class="content-header">
+    <h1>Configuration Setup</h1>
+    <p>Configure your simulation parameters, material properties, and domain settings</p>
+</div>
+
+<div class="setup-intro">
+    <div class="alert alert-info">
+        <strong>ℹ️ Current Configuration:</strong>
+        <ul style="margin-top: 10px; margin-left: 20px;">
+            <li>Config: <strong>{{ current_state.config }}</strong></li>
+            <li>Material: <strong>{{ current_state.material }}</strong></li>
+            <li>Domain: <strong>{{ current_state.domain }}</strong></li>
+        </ul>
+    </div>
+</div>
+
+<form method="POST" id="setup-form">
+    <div class="card card-tabs">
+        <div class="tabs">
+            <div class="tab active" data-tab="config">
+                Configuration
+                {% if current_state.config %}
+                <span class="current-state-badge">Active</span>
+                {% endif %}
+            </div>
+            <div class="tab" data-tab="material">
+                Material
+                {% if current_state.material %}
+                <span class="current-state-badge">Active</span>
+                {% endif %}
+            </div>
+            <div class="tab" data-tab="domain">
+                Domain
+                {% if current_state.domain %}
+                <span class="current-state-badge">Active</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="tab-content" id="content-config">
+            <div class="form-group">
+                <label for="config" class="form-label">
+                    Select Configuration File:
+                </label>
+                <select name="config" id="config" class="form-control" required>
+                    {% for filename in options_data['config'].keys() %}
+                    <option value="{{ filename }}" {% if filename==current_state.config %}selected{% endif %}>
+                        {{ filename }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="tab-content" id="content-material" style="display:none;">
+            <div class="form-group">
+                <label for="material" class="form-label">
+                    Select Material File:
+                </label>
+                <select name="material" id="material" class="form-control" required>
+                    {% for filename in options_data['material'].keys() %}
+                    <option value="{{ filename }}" {% if filename==current_state.material %}selected{% endif %}>
+                        {{ filename }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="tab-content" id="content-domain" style="display:none;">
+            <div class="form-group">
+                <label for="domain" class="form-label">
+                    Select Domain File:
+                </label>
+                <select name="domain" id="domain" class="form-control" required>
+                    {% for filename in options_data['domain'].keys() %}
+                    <option value="{{ filename }}" {% if filename==current_state.domain %}selected{% endif %}>
+                        {{ filename }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="details-panel" id="details">
+            Select a file to view its configuration details.
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">
+                💾 Apply Configuration
+            </button>
+            <a href="{{ url_for('routes.runs') }}" class="btn btn-sm">
+                Cancel
+            </a>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const allData = {{ options_data | tojson }};
+
+    // Tab functionality
+    const tabs = document.querySelectorAll('.tab');
+    const contents = {
+        config: document.getElementById('content-config'),
+        material: document.getElementById('content-material'),
+        domain: document.getElementById('content-domain')
+    };
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            Object.values(contents).forEach(c => c.style.display = 'none');
+            contents[tab.dataset.tab].style.display = 'block';
+
+            // Update details for the newly active tab's current selection
+            const activeSelect = contents[tab.dataset.tab].querySelector('select');
+            if (activeSelect) {
+                updateDetails(tab.dataset.tab, activeSelect.value);
+            }
+        });
+    });
+
+    // Details update functionality
+    const detailsEl = document.getElementById('details');
+    const selects = ['config', 'material', 'domain'].map(id => document.getElementById(id));
+
+    function updateDetails(type, filename) {
+        if (allData[type] && allData[type][filename]) {
+            detailsEl.textContent = JSON.stringify(allData[type][filename], null, 2);
+        } else {
+            detailsEl.textContent = "No details available for this file.";
+        }
+    }
+
+    selects.forEach(select => {
+        select.addEventListener('change', () => {
+            const type = select.id;
+            const file = select.value;
+            updateDetails(type, file);
+        });
+    });
+
+    // Initial Load: Show details for the default selected config
+    if (selects[0].value) {
+        updateDetails('config', selects[0].value);
+    }
+</script>
+{% endblock %}

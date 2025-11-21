@@ -6,11 +6,12 @@ from pina.condition import InputTargetCondition
 from pina.operator import grad, laplacian
 import torch
 
-from material import ConcreteData
-from domain import DomainVariables
-from utils import unscale_T, unscale_alpha
-material_data = ConcreteData()
-domain_vars = DomainVariables()
+#from material import ConcreteData
+#from domain import DomainVariables
+from src.utils import unscale_T, unscale_alpha
+from src.state_management.state import State
+#material_data = ConcreteData()
+#domain_vars = DomainVariables()
 
 
 def save_inverse_T(T, eps=1e-4):
@@ -19,15 +20,15 @@ def chem_affinity_ref(deg_hydration):
         """
         calculates the chemical affinity at reference temperature
         """
-        return (material_data.B1 * ((material_data.B2 / material_data.deg_hydr_max) + deg_hydration) * (material_data.deg_hydr_max - deg_hydration) 
-                * torch.exp(-material_data.eta * deg_hydration / material_data.deg_hydr_max))
+        return (State().material.B1 * ((State().material.B2 / State().material.deg_hydr_max) + deg_hydration) * (State().material.deg_hydr_max - deg_hydration) 
+                * torch.exp(-State().material.eta * deg_hydration / State().material.deg_hydr_max))
 def hydration_rate(input_, output_):
     T_unscaled = unscale_T(output_.extract(["T"]))
     #alpha_unscaled = unscale_alpha(output_.extract(["alpha"]))
     alpha_unscaled = output_.extract(["alpha"])
-    alpha_safe = torch.clamp(alpha_unscaled, 0.0, material_data.deg_hydr_max)
+    alpha_safe = torch.clamp(alpha_unscaled, 0.0, State().material.deg_hydr_max)
 
-    exponent = -material_data.Ea * (save_inverse_T(T_unscaled) - (1/material_data.Temp_ref)) / material_data.R
+    exponent = -State().material.Ea * (save_inverse_T(T_unscaled) - (1/State().material.Temp_ref)) / State().material.R
     exponent = torch.clamp(exponent, min=-150, max=75)
     return chem_affinity_ref(alpha_safe) * torch.exp(exponent)
 
@@ -39,7 +40,7 @@ def alpha_pde(input_, output_):
     return  hydration_rate_val - d_alpha_dt  # NON DIM ???, da beide mal 1/tc
 
 def heat_generation_through_hydration(input_, output_):
-    return material_data.Q_pot * hydration_rate(input_, output_) * material_data.cem
+    return State().material.Q_pot * hydration_rate(input_, output_) * State().material.cem
 
 def heat_pde(input_, output_):
     #print('input_.requires_grad:', input_.requires_grad)
@@ -50,8 +51,8 @@ def heat_pde(input_, output_):
     u_t = grad(output_, input_, components=["T"], d=["t"])
     laplacian_u = laplacian(output_, input_, components=["T"], d=["x", "y", "z"])
 
-    pi_one = (material_data.k * domain_vars.t_c) / (domain_vars.L_c**2 * material_data.cp * material_data.rho)
-    pi_two = domain_vars.t_c / (material_data.cp * material_data.rho * domain_vars.T_c)
+    pi_one = (State().material.k * State().domain.t_c) / (State().domain.L_c**2 * State().material.cp * State().material.rho)
+    pi_two = State().domain.t_c / (State().material.cp * State().material.rho * State().domain.T_c)
 
     heat_source = heat_generation_through_hydration(input_, output_)
     return u_t - pi_one * laplacian_u - pi_two * heat_source
@@ -59,34 +60,47 @@ def heat_pde(input_, output_):
     
 class HeatODE(TimeDependentProblem, SpatialProblem):
     output_variables = ["T", "alpha"]
+    
 
-    start_x = domain_vars.x[0] / domain_vars.L_c
-    end_x = domain_vars.x[1] / domain_vars.L_c
+    spatial_domain = None
+    temporal_domain = None
+    conditions = None
+    
+    def __init__(self):
+        start_x = State().domain.x[0]
+        end_x = State().domain.x[1]
 
-    start_y = domain_vars.y[0] / domain_vars.L_c
-    end_y = domain_vars.y[1] / domain_vars.L_c
+        start_y = State().domain.y[0]
+        end_y = State().domain.y[1]
 
-    start_z = domain_vars.z[0] / domain_vars.L_c
-    end_z = domain_vars.z[1] / domain_vars.L_c
+        start_z = State().domain.z[0]
+        end_z = State().domain.z[1]
 
-    start_t = domain_vars.t[0] / domain_vars.t_c
-    end_t = domain_vars.t[1] / domain_vars.t_c
+        start_t = State().domain.t[0]
+        end_t = State().domain.t[1]
 
-    spatial_domain = CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z]})
-    temporal_domain = CartesianDomain({"t": [start_t, end_t]})
+        self.spatial_domain = CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z]})
+        self.temporal_domain = CartesianDomain({"t": [start_t, end_t]})
 
-    domain = {
-        "D": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),
-        "left": CartesianDomain({"x": start_x, "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),
-        "right": CartesianDomain({"x": end_x, "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),
-        "bottom": CartesianDomain({"x": [start_x, end_x], "y": start_y, "z": [start_z, end_z], "t": [start_t, end_t]}),
-        "top": CartesianDomain({"x": [start_x, end_x], "y": end_y, "z": [start_z, end_z], "t": [start_t, end_t]}),
-        "front": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": start_z, "t": [start_t, end_t]}),
-        "back": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": end_z, "t": [start_t, end_t]}),
-        "initial": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z], "t": start_t}),
-    }
-    conditions = {
-        "physi_T": Condition(domain="D", equation=Equation(heat_pde)),
-        "physi_alpha": Condition(domain="D", equation=Equation(alpha_pde)),        
-    }
+        #self.input_variables = ["x", "y", "z", "t"] # Ensure input variables are defined
+        
+        print("Maybe HERE I DID CHAGNE TO INIT IS NOT GOOUUUUd")
+        # Define sub-domains
+        self.domain = {
+            "D": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),
+            "left": CartesianDomain({"x": start_x, "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),
+            "right": CartesianDomain({"x": end_x, "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),
+            "bottom": CartesianDomain({"x": [start_x, end_x], "y": start_y, "z": [start_z, end_z], "t": [start_t, end_t]}),
+            "top": CartesianDomain({"x": [start_x, end_x], "y": end_y, "z": [start_z, end_z], "t": [start_t, end_t]}),
+            "front": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": start_z, "t": [start_t, end_t]}),
+            "back": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": end_z, "t": [start_t, end_t]}),
+            "initial": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z], "t": start_t}),
+        }
+        
+        self.conditions = {
+            "physi_T": Condition(domain="D", equation=Equation(heat_pde)),
+            "physi_alpha": Condition(domain="D", equation=Equation(alpha_pde)),        
+        }
+        
+        super().__init__()
 

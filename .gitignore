@@ -3,3 +3,6 @@
 content/
 
 .vscode/
+
+# User-specific state persistence
+.current_state.json
