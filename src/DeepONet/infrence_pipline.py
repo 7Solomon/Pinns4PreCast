@@ -3,15 +3,12 @@ import torch
 from scipy.stats import qmc
 
 
-from DeepONet.data_loader import DeepONetDataset
-from DeepONet.vis import export_to_vtk_series, export_sensors_to_csv
+from src.DeepONet.data_loader import DeepONetDataset
+from src.DeepONet.vis import export_to_vtk_series, export_sensors_to_csv
 
-raise NotImplementedError("DU KEK HIER FEHLT STATE MANGEMGENT")
-from domain import DomainVariables
-from material import ConcreteData
+
 from src.utils import unscale_T
-material_data = ConcreteData()
-domain_vars = DomainVariables()
+from src.state_management.state import State
 
 
 def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 
@@ -48,6 +45,8 @@ def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1),
     print(f"  T range: [{test_coords[:, 3].min():.3f}, {test_coords[:, 3].max():.3f}]")
     
     return test_coords
+
+
 def testFlexDeepONet(solver, idx_path=None, 
                      n_spatial=10, n_time=10, num_sensors_bc=100, num_sensors_ic=100):
     """
@@ -95,8 +94,8 @@ def testFlexDeepONet(solver, idx_path=None,
 
         # BECAUSE WE LIKE STRUTURED GRID FOR CHECKING
         test_coords = create_test_grid(
-            spatial_domain=[domain_vars.x, domain_vars.y, domain_vars.z], 
-            time_domain=domain_vars.t,
+            spatial_domain=[State().domain.x, State().domain.y, State().domain.z], 
+            time_domain=State().domain.t,
             n_spatial=n_spatial,
             n_time=n_time
         ).to(device)

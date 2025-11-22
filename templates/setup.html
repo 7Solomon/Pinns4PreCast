@@ -105,7 +105,7 @@
 
 {% block scripts %}
 <script>
-    const allData = {{ options_data | tojson }};
+    const allData = "{{ options_data | tojson }}";
 
     // Tab functionality
     const tabs = document.querySelectorAll('.tab');

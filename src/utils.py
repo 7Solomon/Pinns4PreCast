@@ -1,3 +1,4 @@
+import os
 import torch
 from pina import LabelTensor # Ensure LabelTensor is imported if checking isinstance
 
@@ -76,3 +77,22 @@ def torch_interp1d(x_new, x_old, y_old):
     weight = (x_new - x_left) / torch.where(denom == 0, torch.ones_like(denom), denom)
 
     return y_left + weight * (y_right - y_left)
+
+
+def read_files_to_map(directory):
+    files_map = {}
+    if not os.path.exists(directory):
+        return files_map
+        
+    try:
+        sorted_files = sorted(
+            [f for f in os.listdir(directory) if f.endswith('.csv')],
+            key=lambda x: int(x.split('_')[1].split('.')[0]) if '_' in x else 0
+        )
+    except:
+        sorted_files = sorted([f for f in os.listdir(directory) if f.endswith('.csv')])
+    for filename in sorted_files:
+        filepath = os.path.join(directory, filename)
+        with open(filepath, 'r') as f:
+            files_map[filename] = f.read() # Read content as string
+    return files_map

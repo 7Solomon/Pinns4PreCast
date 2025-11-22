@@ -9,7 +9,8 @@ routes_bp = Blueprint('routes', __name__)
 @routes_bp.route('/')
 def index():
     """Landing page - always redirect to runs (state is auto-loaded)"""
-    return redirect(url_for('routes.index'))
+    print("LANDEDING PAGE")
+    return redirect(url_for('routes.runs'))
 
 
 @routes_bp.route('/runs')
@@ -22,13 +23,6 @@ def runs():
         runs = sorted(os.listdir(runs_path), reverse=True)
     
     return render_template('runs.html', runs=runs, active_page='runs')
-
-
-@routes_bp.route('/run/<run_id>')
-def view_run(run_id):
-    """View details of a specific run"""
-    # TODO: Implement run details page
-    return f"<h1>Run Details: {run_id}</h1><p>Coming soon...</p>"
 
 
 @routes_bp.route('/setup', methods=['GET', 'POST'])

@@ -1,8 +1,8 @@
 */__pycache__/
 *__pycache__/
 content/
+content_depr/
 
 .vscode/
 
-# User-specific state persistence
 .current_state.json

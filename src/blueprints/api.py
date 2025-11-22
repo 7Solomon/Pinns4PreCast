@@ -1,3 +1,5 @@
+import json
+import pandas as pd
 import torch
 from flask import Blueprint, request, jsonify
 import torch.nn as nn
@@ -7,7 +9,11 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
 import os
-
+import threading
+import numpy as np
+from src.DeepONet.callback import VisualizationCallback
+from src.DeepONet.infrence_pipline import testFlexDeepONet
+from src.DeepONet.logger import DashboardLogger
 from src.DeepONet.model_definition import FlexDeepONet
 from problem_definition import HeatODE
 from src.DeepONet.data_loader import DeepONetDataset
@@ -17,6 +23,7 @@ from src.DeepONet.training_pipline import DeepONetSolver
 from src.state_management.state import State
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
+CONSOLE_OUTPUT = False 
 
 
 @api_bp.route('/define_model', methods=['POST'])
@@ -79,6 +86,11 @@ def define_training_pipeline():
     
     return jsonify({"message": "Training pipeline created"})
 
+def run_training_background(trainer: pl.Trainer, solver, dataloader):
+    try:
+        trainer.fit(solver, train_dataloaders=dataloader)
+    except Exception as e:
+        print(f"Training failed: {e}")
 
 @api_bp.route('/train', methods=['POST'])
 def train():
@@ -96,24 +108,47 @@ def train():
         mode='min',
         save_top_k=3,
         save_last=True,
-        verbose=True
+        verbose=CONSOLE_OUTPUT
     )
-    logger = TensorBoardLogger(
-        save_dir=State().directory_manager.runs_path,
-        name=State().directory_manager.log_name
+    visualization_callback = VisualizationCallback(
+        vtk_path=State().directory_manager.vtk_path, 
+        sensor_temp_path=State().directory_manager.sensor_temp_path, 
+        sensor_alpha_path=State().directory_manager.sensor_alpha_path,
+        plot_every_n_epochs=10
+    )
+
+
+    #logger = TensorBoardLogger(
+    #    save_dir=State().directory_manager.runs_path,
+    #    name=State().directory_manager.log_name
+    #)
+    dash_logger = DashboardLogger(
+        save_dir=State().directory_manager.runs_path, 
+        version=State().directory_manager.run_idx_path
     )
     
     trainer = pl.Trainer(
         max_epochs=100,
         accelerator='gpu',
         devices=1,
-        logger=logger,
-        callbacks=[checkpoint_callback],
+        logger=[dash_logger],  # CAN be both loggers
+        callbacks=[checkpoint_callback, visualization_callback],
         log_every_n_steps=10,
-        enable_progress_bar=True,
-        enable_model_summary=True
+        enable_progress_bar=CONSOLE_OUTPUT,
+        enable_model_summary=CONSOLE_OUTPUT
     )
+
+    thread = threading.Thread(
+        target=run_training_background, 
+        args=(trainer, State().solver, State().dataloader)
+    )
+    thread.start()
     
-    trainer.fit(State().solver, train_dataloaders=State().dataloader)
+    #trainer.fit(State().solver, train_dataloaders=State().dataloader)
     
-    return jsonify({"message": "Training finished", "path": State().directory_manager.run_idx_path})
+    return jsonify({
+        "message": "Training started in background", 
+        "run_id": State().directory_manager.run_idx_path
+    })
+
+

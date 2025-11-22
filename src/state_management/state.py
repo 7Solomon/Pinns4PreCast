@@ -180,13 +180,27 @@ class DirectoryManager:
     
     @property
     def vtk_path(self):
+        os.makedirs(os.path.join(self.runs_path, self.run_idx_path, 'vtk'), exist_ok=True)
         return os.path.join(self.runs_path, self.run_idx_path, 'vtk')
+    def get_vtk_path(self, idx):
+        os.makedirs(os.path.join(self.runs_path, idx, 'vtk'), exist_ok=True)
+        return os.path.join(self.runs_path, idx, 'vtk')
+    
     @property
     def sensor_alpha_path(self):
-        return os.path.join(self.runs_path, self.run_idx_path, 'sensor_alpha.csv')
+        os.makedirs(os.path.join(self.runs_path, self.run_idx_path, 'sensor_alpha'), exist_ok=True)
+        return os.path.join(self.runs_path, self.run_idx_path, 'sensor_alpha')
+    def get_sensor_alpha_path(self, idx):
+        os.makedirs(os.path.join(self.runs_path, idx, 'sensor_alpha'), exist_ok=True)
+        return os.path.join(self.runs_path, idx, 'sensor_alpha')
+    
     @property
     def sensor_temp_path(self):
-        return os.path.join(self.runs_path, self.run_idx_path, 'sensor_temperature.csv')
+        os.makedirs(os.path.join(self.runs_path, self.run_idx_path, 'sensor_temperature'), exist_ok=True)
+        return os.path.join(self.runs_path, self.run_idx_path, 'sensor_temperature')
+    def get_sensor_temp_path(self, idx):
+        os.makedirs(os.path.join(self.runs_path, idx, 'sensor_temperature'), exist_ok=True)
+        return os.path.join(self.runs_path, idx, 'sensor_temperature')
 
     materials_path: str = os.path.join('content', 'states', 'materials')
     domains_path: str = os.path.join('content', 'states', 'domains')

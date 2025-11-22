@@ -3,9 +3,8 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 from scipy.interpolate import griddata
-raise NotImplementedError("DU KEK HIER FEHLT STATE MANGEMGENT")
-from domain import DomainVariables
-domain_vars = DomainVariables()
+
+from src.state_management.state import State
 
 def create_unified_interactive_viz_v2(predictions, test_coords, bc_samples=None, ic_samples=None, output_html="viz.html"):
     all_times = np.unique(test_coords[:, 3])
@@ -184,7 +183,7 @@ def create_unified_interactive_viz_v2(predictions, test_coords, bc_samples=None,
 
 def create_vis_on_sensor_points(predictions, test_coords, output_html="sensor_viz.html"):
     data = []
-    for idx, (sensor_id, point) in enumerate(domain_vars.TEMP_SENS_POINTS.items()):
+    for idx, (sensor_id, point) in enumerate(State().domain.TEMP_SENS_POINTS.items()):
         mask_point = np.isclose(test_coords[:, :3], point).all(axis=1)
         times = test_coords[mask_point, 3]
         temp = predictions[mask_point, 0]
@@ -333,25 +332,27 @@ def export_to_vtk_series(predictions, test_coords, idx_path=None):
         f.write("\n".join(pvd_lines))
         
     print(f"Done. Open '{os.path.join(output_folder, 'results.pvd')}' in ParaView.")
-def export_sensors_to_csv(predictions, test_coords, idx_path=None):
+
+
+def export_sensors_to_csv(predictions, test_coords, sensor_temp_path, sensor_alpha_path):
     """
     Interpolates data at sensor locations for all time steps and saves two CSVs:
     - sensors_temperature.csv (Time_s, Time_h, <sensor>_Temp...)
     - sensors_alpha.csv       (Time_s, Time_h, <sensor>_Alpha...)
     """
-    if idx_path is None:
-        content_dir = os.listdir(os.path.join('content'))
-        if not content_dir:
-            raise ValueError("No content directory found for exporting VTK files.")
-        idx_path = os.path.join('content', content_dir[-1])
-
-    output_temp = os.path.join(idx_path, "sensors_temperature.csv")
-    output_alpha = os.path.join(idx_path, "sensors_alpha.csv")
+    #if idx_path is None:
+    #    content_dir = os.listdir(os.path.join('content'))
+    #    if not content_dir:
+    #        raise ValueError("No content directory found for exporting VTK files.")
+    #    idx_path = os.path.join('content', content_dir[-1])
+#
+    #output_temp = os.path.join(idx_path, "sensors_temperature.csv")
+    #output_alpha = os.path.join(idx_path, "sensors_alpha.csv")
 
     all_times = np.unique(test_coords[:, 3])
     all_times.sort()
 
-    sensor_ids = list(domain_vars.TEMP_SENS_POINTS.keys())
+    sensor_ids = list(State().domain.TEMP_SENS_POINTS.keys())
 
     header_temp = ["Time_s", "Time_h"] + [f"{sid}_Temp" for sid in sensor_ids]
     header_alpha = ["Time_s", "Time_h"] + [f"{sid}_Alpha" for sid in sensor_ids]
@@ -359,7 +360,7 @@ def export_sensors_to_csv(predictions, test_coords, idx_path=None):
     rows_temp = []
     rows_alpha = []
 
-    print(f"Interpolating sensors for CSV export ({len(all_times)} timesteps, {len(sensor_ids)} sensors)...")
+    #print(f"Interpolating sensors for CSV export ({len(all_times)} timesteps, {len(sensor_ids)} sensors)...")
 
     for t in all_times:
         mask_t = np.isclose(test_coords[:, 3], t)
@@ -370,7 +371,7 @@ def export_sensors_to_csv(predictions, test_coords, idx_path=None):
         alpha_row = [t, t / 3600.0]
 
         for sid in sensor_ids:
-            point = domain_vars.TEMP_SENS_POINTS[sid]
+            point = State().domain.TEMP_SENS_POINTS[sid]
 
             temp_val = griddata(coords_t, pred_t[:, 0], point, method='linear')
             alpha_val = griddata(coords_t, pred_t[:, 1], point, method='linear')
@@ -387,8 +388,8 @@ def export_sensors_to_csv(predictions, test_coords, idx_path=None):
         rows_alpha.append(alpha_row)
 
     # Save CSVs
-    np.savetxt(output_temp, np.array(rows_temp), delimiter=",", header=",".join(header_temp), comments="", fmt="%.6f")
-    np.savetxt(output_alpha, np.array(rows_alpha), delimiter=",", header=",".join(header_alpha), comments="", fmt="%.6f")
+    np.savetxt(sensor_temp_path, np.array(rows_temp), delimiter=",", header=",".join(header_temp), comments="", fmt="%.6f")
+    np.savetxt(sensor_alpha_path, np.array(rows_alpha), delimiter=",", header=",".join(header_alpha), comments="", fmt="%.6f")
 
-    print(f"Temperature sensor data exported to '{output_temp}'")
-    print(f"Alpha sensor data exported to '{output_alpha}'")
+    #print(f"Temperature sensor data exported to '{sensor_temp_path}'")
+    #print(f"Alpha sensor data exported to '{sensor_alpha_path}'")
