@@ -52,7 +52,7 @@ class ModelConfig:
 @dataclass
 class TrainingConfig:
     max_epochs: int = 100
-    loss_weights: Dict[str, float] = field(default_factory=lambda: {'physics': 1.0, 'bc': 1.0, 'ic': 1.0})
+    loss_weights: Dict[str, float] = field(default_factory=lambda: {'physics': 100.0, 'bc': 1.0, 'ic': 10.0})
     
     optimizer_type: str = 'Adam'
     optimizer_learning_rate: float = 1e-4

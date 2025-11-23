@@ -16,8 +16,7 @@ from src.DeepONet.infrence_pipline import testFlexDeepONet
 from src.DeepONet.logger import DashboardLogger
 from src.DeepONet.model_definition import FlexDeepONet
 from problem_definition import HeatODE
-from src.DeepONet.data_loader import DeepONetDataset
-from src.DeepONet.data_loader import deeponet_collate_fn
+from src.DeepONet.dataset import DeepONetDataset, deeponet_collate_fn
 from src.DeepONet.training_pipline import DeepONetSolver
 
 from src.state_management.state import State

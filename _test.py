@@ -9,10 +9,10 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 import os
 
-from DeepONet.model_definition import FlexDeepONet
-from DeepONet.infrence_pipline import testFlexDeepONet
-from DeepONet.training_pipline import DeepONetSolver
-from DeepONet.data_loader import DeepONetDataset, deeponet_collate_fn
+from src.DeepONet.model_definition import FlexDeepONet
+from src.DeepONet.infrence_pipline import testFlexDeepONet
+from src.DeepONet.training_pipline import DeepONetSolver
+from src.DeepONet.dataset import DeepONetDataset, deeponet_collate_fn
 from problem_definition import HeatODE
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'

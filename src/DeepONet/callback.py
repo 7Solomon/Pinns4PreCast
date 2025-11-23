@@ -3,7 +3,7 @@ import torch
 import os
 
 
-from src.DeepONet.data_loader import DeepONetDataset
+from src.DeepONet.dataset import DeepONetDataset
 from src.DeepONet.infrence_pipline import create_test_grid
 from src.DeepONet.vis import export_sensors_to_csv, export_to_vtk_series
 from src.state_management.state import State
@@ -44,8 +44,8 @@ class VisualizationCallback(Callback):
                 )
                 
                 sample = ds[0]
-                bc_target_temperature = sample['bc_target_temperature'].unsqueeze(0).to(device)
-                ic_target_temperature = sample['ic_target_temperature'].unsqueeze(0).to(device)
+                bc_target_temperature = sample['bc_sensor_values'].unsqueeze(0).to(device)
+                ic_target_temperature = sample['ic_sensor_values'].unsqueeze(0).to(device)
 
                 # Create grid
                 test_coords = create_test_grid(
@@ -58,8 +58,8 @@ class VisualizationCallback(Callback):
                 test_coords_batched = test_coords.unsqueeze(0) # [1, num_points, 4]
 
                 test_batch = {
-                    'bc_target_temperature': bc_target_temperature,
-                    'ic_target_temperature': ic_target_temperature,
+                    'bc_sensor_values': bc_target_temperature,
+                    'ic_sensor_values': ic_target_temperature,
                     'query_coords': test_coords_batched
                 }
                 

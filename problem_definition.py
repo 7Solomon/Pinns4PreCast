@@ -37,7 +37,7 @@ def alpha_pde(input_, output_):
     alpha = output_.extract(["alpha"])
     d_alpha_dt = grad(alpha, input_, components=["alpha"], d=["t"])
     
-    return  hydration_rate_val - d_alpha_dt  # NON DIM ???, da beide mal 1/tc
+    return  hydration_rate_val * State().domain.t_c - d_alpha_dt  # NON DIM ???, da beide mal 1/tc
 
 def heat_generation_through_hydration(input_, output_):
     return State().material.Q_pot * hydration_rate(input_, output_) * State().material.cem
@@ -84,7 +84,6 @@ class HeatODE(TimeDependentProblem, SpatialProblem):
 
         #self.input_variables = ["x", "y", "z", "t"] # Ensure input variables are defined
         
-        print("Maybe HERE I DID CHAGNE TO INIT IS NOT GOOUUUUd")
         # Define sub-domains
         self.domain = {
             "D": CartesianDomain({"x": [start_x, end_x], "y": [start_y, end_y], "z": [start_z, end_z], "t": [start_t, end_t]}),

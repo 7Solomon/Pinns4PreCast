@@ -56,8 +56,8 @@ class DeepONetSolver(SingleSolverInterface):
                 - 'ic_sensors': [batch_size, num_ic_sensors]
                 - 'query_coords': [batch_size, num_points, 4] (x,y,z,t)
         """
-        bc_sensor_values = batch['bc_target_temperature']
-        ic_sensor_values = batch['ic_target_temperature']
+        bc_sensor_values = batch['bc_sensor_values']
+        ic_sensor_values = batch['ic_sensor_values']
         query_coords = batch['query_coords']
         
         predictions = self.model([bc_sensor_values, ic_sensor_values], query_coords)
@@ -81,8 +81,8 @@ class DeepONetSolver(SingleSolverInterface):
         
         # Create batch dict for forward pass
         pde_batch = {
-            'bc_target_temperature': batch['bc_target_temperature'],  # [batch_size, num_sensors]
-            'ic_target_temperature': batch['ic_target_temperature'],  # [batch_size, num_sensors, 2]
+            'bc_sensor_values': batch['bc_sensor_values'],  # [batch_size, num_sensors]
+            'ic_sensor_values': batch['ic_sensor_values'],  # [batch_size, num_sensors, 2]
             'query_coords': pde_coords_reshaped
         }
         
@@ -117,8 +117,8 @@ class DeepONetSolver(SingleSolverInterface):
         
         # Create batch dict for forward pass
         bc_batch = {
-            'bc_target_temperature': batch['bc_target_temperature'],
-            'ic_target_temperature': batch['ic_target_temperature'],
+            'bc_sensor_values': batch['bc_sensor_values'],
+            'ic_sensor_values': batch['ic_sensor_values'],
             'query_coords': bc_coords
         }
         
@@ -143,8 +143,8 @@ class DeepONetSolver(SingleSolverInterface):
         
         # Create batch dict for forward pass
         ic_batch = {
-            'bc_target_temperature': batch['bc_target_temperature'],
-            'ic_target_temperature': batch['ic_target_temperature'],
+            'bc_sensor_values': batch['bc_sensor_values'],
+            'ic_sensor_values': batch['ic_sensor_values'],
             'query_coords': ic_coords
         }
         

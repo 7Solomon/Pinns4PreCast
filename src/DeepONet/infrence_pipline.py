@@ -3,7 +3,7 @@ import torch
 from scipy.stats import qmc
 
 
-from src.DeepONet.data_loader import DeepONetDataset
+from src.DeepONet.dataset import DeepONetDataset
 from src.DeepONet.vis import export_to_vtk_series, export_sensors_to_csv
 
 
@@ -89,8 +89,8 @@ def testFlexDeepONet(solver, idx_path=None,
         )
         
         sample = ds[0]
-        bc_target_temperature = sample['bc_target_temperature'].unsqueeze(0)    # DELETET CHANGED TO USE SOMEHTING ELSE
-        ic_target_temperature = sample['ic_target_temperature'].unsqueeze(0)
+        bc_target_temperature = sample['bc_sensor_values'].unsqueeze(0)    # DELETET CHANGED TO USE SOMEHTING ELSE
+        ic_target_temperature = sample['ic_sensor_values'].unsqueeze(0)
 
         # BECAUSE WE LIKE STRUTURED GRID FOR CHECKING
         test_coords = create_test_grid(
@@ -105,8 +105,8 @@ def testFlexDeepONet(solver, idx_path=None,
         
         # DICT
         test_batch = {
-            'bc_target_temperature': bc_target_temperature,  # [1, num_sensors]
-            'ic_target_temperature': ic_target_temperature,  # [1, num_sensors]
+            'bc_sensor_values': bc_target_temperature,  # [1, num_sensors]
+            'ic_sensor_values': ic_target_temperature,  # [1, num_sensors]
             'query_coords': test_coords_batched  # [1, num_points, 4]
         }
         
