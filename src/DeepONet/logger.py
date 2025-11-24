@@ -17,18 +17,22 @@ class DashboardLogger(Logger):
         self.status_file = os.path.join(self.log_dir, 'status.json')
         self.metrics_file = os.path.join(self.log_dir, 'metrics.csv')
         
-        # 1. DEFINE SCHEMA
-        # We define a fixed list of all possible columns your Solver will emit.
-        # This ensures the CSV structure is stable for the dashboard reader.
         self.fieldnames = [
             'step', 'epoch', 'timestamp',
-            # Training Metrics (from training_step)
+            
+            # Main Losses
             'loss_physics', 'loss_bc', 'loss_ic',
             'loss', 'loss_step', 'loss_epoch',
-            # Validation Metrics (from validation_step)
+            
+            # NEW: Granular Physics Losses
+            'loss_phys_temperature', 'loss_phys_alpha',
+            
+            # NEW: Granular BC/IC Losses
+            'loss_bc_temperature', 
+            'loss_ic_temperature', 'loss_ic_alpha',
+            
+            # Validation Metrics
             'val_loss_physics', 'val_loss_bc', 'val_loss_ic',
-            # 'val_loss' isn't explicitly in your solver (you use 'loss' there too),
-            # but good to have if you rename it later.
             'val_loss' 
         ]
         

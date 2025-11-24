@@ -1,158 +1,324 @@
 {% extends "base.html" %}
+{% from "components/form_fields.html" import number_field, text_field, range_field, sensor_dict_field %}
 
-{% block title %}Configuration Setup - PINN Dashboard{% endblock %}
+{% block title %}Configuration Setup{% endblock %}
 
 {% block content %}
+<!-- Load Bootstrap CSS locally or via CDN if not in base.html -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup.css') }}">
+
 <div class="content-header">
     <h1>Configuration Setup</h1>
-    <p>Configure your simulation parameters, material properties, and domain settings</p>
+    <p>Configure parameters, material properties, and domain settings</p>
 </div>
 
-<div class="setup-intro">
-    <div class="alert alert-info">
-        <strong>ℹ️ Current Configuration:</strong>
-        <ul style="margin-top: 10px; margin-left: 20px;">
-            <li>Config: <strong>{{ current_state.config }}</strong></li>
-            <li>Material: <strong>{{ current_state.material }}</strong></li>
-            <li>Domain: <strong>{{ current_state.domain }}</strong></li>
-        </ul>
+<!-- ACTIVE STATE DISPLAY -->
+<div class="alert alert-info d-flex align-items-center mb-3 shadow-sm">
+    <div class="me-3"><strong>Active Configuration:</strong></div>
+    <div class="d-flex gap-3">
+        <span class="badge bg-primary">Config: {{ current_state.config }}</span>
+        <span class="badge bg-success">Material: {{ current_state.material }}</span>
+        <span class="badge bg-info">Domain: {{ current_state.domain }}</span>
     </div>
 </div>
 
-<form method="POST" id="setup-form">
-    <div class="card card-tabs">
-        <div class="tabs">
-            <div class="tab active" data-tab="config">
-                Configuration
-                {% if current_state.config %}
-                <span class="current-state-badge">Active</span>
-                {% endif %}
-            </div>
-            <div class="tab" data-tab="material">
-                Material
-                {% if current_state.material %}
-                <span class="current-state-badge">Active</span>
-                {% endif %}
-            </div>
-            <div class="tab" data-tab="domain">
-                Domain
-                {% if current_state.domain %}
-                <span class="current-state-badge">Active</span>
-                {% endif %}
-            </div>
-        </div>
+<!-- TABS NAVIGATION -->
+<ul class="nav nav-tabs" id="configTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="config-tab" data-bs-toggle="tab" data-bs-target="#tab-config" type="button"
+            role="tab" aria-controls="tab-config" aria-selected="true">
+            Configuration
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="material-tab" data-bs-toggle="tab" data-bs-target="#tab-material" type="button"
+            role="tab" aria-controls="tab-material" aria-selected="false">
+            Material
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="domain-tab" data-bs-toggle="tab" data-bs-target="#tab-domain" type="button"
+            role="tab" aria-controls="tab-domain" aria-selected="false">
+            Domain
+        </button>
+    </li>
+</ul>
 
-        <div class="tab-content" id="content-config">
-            <div class="form-group">
-                <label for="config" class="form-label">
-                    Select Configuration File:
-                </label>
-                <select name="config" id="config" class="form-control" required>
-                    {% for filename in options_data['config'].keys() %}
-                    <option value="{{ filename }}" {% if filename==current_state.config %}selected{% endif %}>
-                        {{ filename }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
+<!-- TAB CONTENT WRAPPER -->
+<div class="tab-content card" id="configTabContent">
 
-        <div class="tab-content" id="content-material" style="display:none;">
-            <div class="form-group">
-                <label for="material" class="form-label">
-                    Select Material File:
-                </label>
-                <select name="material" id="material" class="form-control" required>
-                    {% for filename in options_data['material'].keys() %}
-                    <option value="{{ filename }}" {% if filename==current_state.material %}selected{% endif %}>
-                        {{ filename }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-
-        <div class="tab-content" id="content-domain" style="display:none;">
-            <div class="form-group">
-                <label for="domain" class="form-label">
-                    Select Domain File:
-                </label>
-                <select name="domain" id="domain" class="form-control" required>
-                    {% for filename in options_data['domain'].keys() %}
-                    <option value="{{ filename }}" {% if filename==current_state.domain %}selected{% endif %}>
-                        {{ filename }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-
-        <div class="details-panel" id="details">
-            Select a file to view its configuration details.
-        </div>
-
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary btn-lg">
-                💾 Apply Configuration
+    <!-- ============ CONFIG TAB ============ -->
+    <div class="tab-pane fade show active" id="tab-config" role="tabpanel" aria-labelledby="config-tab">
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+            <h5 class="mb-0">Configuration Files</h5>
+            <button class="btn btn-success btn-sm" onclick="createNew('config')">
+                + Add New Configuration
             </button>
-            <a href="{{ url_for('routes.runs') }}" class="btn btn-sm">
-                Cancel
-            </a>
+        </div>
+
+        <div class="accordion accordion-flush" id="accordionConfig">
+            {% for filename, data in options_data['config'].items() %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button
+                        class="accordion-button collapsed {% if filename == current_state.config %}bg-success-subtle{% endif %}"
+                        type="button" data-bs-toggle="collapse" data-bs-target="#collapse-config-{{ loop.index }}">
+                        {{ filename }}
+                        {% if filename == current_state.config %}
+                        <span class="badge bg-success ms-2">Active</span>
+                        {% endif %}
+                    </button>
+                </h2>
+                <div id="collapse-config-{{ loop.index }}" class="accordion-collapse collapse"
+                    data-bs-parent="#accordionConfig">
+                    <div class="accordion-body">
+                        <form onsubmit="saveInline(event, 'config', '{{ filename }}')">
+                            <h6 class="form-section-header">Dataset Configuration</h6>
+                            {{ number_field('dataset.n_pde', data.dataset.n_pde, 'PDE Points', '', 1) }}
+                            {{ number_field('dataset.n_ic', data.dataset.n_ic, 'Initial Condition Points', '', 1) }}
+                            {{ number_field('dataset.n_bc_face', data.dataset.n_bc_face, 'BC Points per Face', '', 1) }}
+                            {{ number_field('dataset.batch_size', data.dataset.batch_size, 'Batch Size', '', 1) }}
+                            {{ number_field('dataset.num_samples', data.dataset.num_samples, 'Total Samples', '', 1) }}
+
+                            <h6 class="form-section-header">Model Configuration</h6>
+                            {{ number_field('model.num_sensors_bc', data.model.num_sensors_bc, 'BC Sensors', '', 1) }}
+                            {{ number_field('model.num_sensors_ic', data.model.num_sensors_ic, 'IC Sensors', '', 1) }}
+                            {{ number_field('model.num_outputs', data.model.num_outputs, 'Output Dimensions', '', 1) }}
+                            {{ number_field('model.latent_dim', data.model.latent_dim, 'Latent Dimension', '', 1) }}
+
+                            <h6 class="form-section-header">Training Configuration</h6>
+                            {{ number_field('training.max_epochs', data.training.max_epochs, 'Max Epochs', '', 1) }}
+                            {{ number_field('training.optimizer_learning_rate', data.training.optimizer_learning_rate,
+                            'Learning Rate', '', 0.0, 1.0) }}
+                            {{ text_field('training.optimizer_type', data.training.optimizer_type, 'Optimizer') }}
+                            {{ text_field('training.scheduler_type', data.training.scheduler_type, 'Scheduler') }}
+                            {{ number_field('training.scheduler_factor', data.training.scheduler_factor, 'LR Factor',
+                            '', 0.0, 1.0) }}
+                            {{ number_field('training.scheduler_patience', data.training.scheduler_patience, 'Scheduler
+                            Patience', '', 1) }}
+
+                            <div class="accordion-actions">
+                                <button type="submit" class="btn btn-success">💾 Save Changes</button>
+                                <button type="button" class="btn btn-primary"
+                                    onclick="setActive('config', '{{ filename }}')">✓ Set as Active</button>
+                                <button type="button" class="btn btn-outline-danger"
+                                    onclick="deleteFile('config', '{{ filename }}')">🗑 Delete</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
-</form>
+
+    <!-- ============ MATERIAL TAB ============ -->
+    <div class="tab-pane fade" id="tab-material" role="tabpanel" aria-labelledby="material-tab">
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+            <h5 class="mb-0">Material Properties</h5>
+            <button class="btn btn-success btn-sm" onclick="createNew('material')">
+                + Add New Material
+            </button>
+        </div>
+
+        <div class="accordion accordion-flush" id="accordionMaterial">
+            {% for filename, data in options_data['material'].items() %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button
+                        class="accordion-button collapsed {% if filename == current_state.material %}bg-success-subtle{% endif %}"
+                        type="button" data-bs-toggle="collapse" data-bs-target="#collapse-mat-{{ loop.index }}">
+                        {{ filename }}
+                        {% if filename == current_state.material %}
+                        <span class="badge bg-success ms-2">Active</span>
+                        {% endif %}
+                    </button>
+                </h2>
+                <div id="collapse-mat-{{ loop.index }}" class="accordion-collapse collapse"
+                    data-bs-parent="#accordionMaterial">
+                    <div class="accordion-body">
+                        <form onsubmit="saveInline(event, 'material', '{{ filename }}')">
+                            {{ text_field('name', data.name, 'Material Name') }}
+
+                            <h6 class="form-section-header">Thermal Properties</h6>
+                            {{ number_field('k', data.k, 'Thermal Conductivity', 'W/(m·K)') }}
+                            {{ number_field('cp', data.cp, 'Specific Heat', 'J/(kg·K)') }}
+                            {{ number_field('rho', data.rho, 'Density', 'kg/m³') }}
+
+                            <h6 class="form-section-header">Hydration Parameters</h6>
+                            {{ number_field('Q_pot', data.Q_pot, 'Potential Heat', 'J/kg') }}
+                            {{ number_field('B1', data.B1, 'B1 Parameter', '1/s') }}
+                            {{ number_field('B2', data.B2, 'B2 Parameter', '1/s') }}
+                            {{ number_field('deg_hydr_max', data.deg_hydr_max, 'Max Hydration Degree', '', 0, 1) }}
+                            {{ number_field('eta', data.eta, 'Eta Parameter') }}
+                            {{ number_field('cem', data.cem, 'Cement Content', 'kg/m³') }}
+
+                            <div class="accordion-actions">
+                                <button type="submit" class="btn btn-success">💾 Save Changes</button>
+                                <button type="button" class="btn btn-primary"
+                                    onclick="setActive('material', '{{ filename }}')">✓ Set as Active</button>
+                                <button type="button" class="btn btn-outline-danger"
+                                    onclick="deleteFile('material', '{{ filename }}')">🗑 Delete</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ============ DOMAIN TAB ============ -->
+    <div class="tab-pane fade" id="tab-domain" role="tabpanel" aria-labelledby="domain-tab">
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+            <h5 class="mb-0">Domain Settings</h5>
+            <button class="btn btn-success btn-sm" onclick="createNew('domain')">
+                + Add New Domain
+            </button>
+        </div>
+
+        <div class="accordion accordion-flush" id="accordionDomain">
+            {% for filename, data in options_data['domain'].items() %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button
+                        class="accordion-button collapsed {% if filename == current_state.domain %}bg-success-subtle{% endif %}"
+                        type="button" data-bs-toggle="collapse" data-bs-target="#collapse-dom-{{ loop.index }}">
+                        {{ filename }}
+                        {% if filename == current_state.domain %}
+                        <span class="badge bg-success ms-2">Active</span>
+                        {% endif %}
+                    </button>
+                </h2>
+                <div id="collapse-dom-{{ loop.index }}" class="accordion-collapse collapse"
+                    data-bs-parent="#accordionDomain">
+                    <div class="accordion-body">
+                        <form onsubmit="saveInline(event, 'domain', '{{ filename }}')">
+                            <h6 class="form-section-header">Spatial Domain</h6>
+                            {{ range_field('x', data.x, 'X Range', 'm') }}
+                            {{ range_field('y', data.y, 'Y Range', 'm') }}
+                            {{ range_field('z', data.z, 'Z Range', 'm') }}
+                            {{ range_field('t', data.t, 'Time Range', 's') }}
+
+                            <h6 class="form-section-header">Characteristic Scales</h6>
+                            {{ number_field('T_c', data.T_c, 'Temperature Scale', '°C') }}
+                            {{ number_field('L_c', data.L_c, 'Length Scale', 'm') }}
+                            {{ number_field('t_c', data.t_c, 'Time Scale', 's') }}
+
+                            <h6 class="form-section-header">Sensor Locations</h6>
+                            {{ sensor_dict_field('TEMP_SENS_POINTS', data.TEMP_SENS_POINTS, 'Temperature Sensors') }}
+
+                            <div class="accordion-actions">
+                                <button type="submit" class="btn btn-success">💾 Save Changes</button>
+                                <button type="button" class="btn btn-primary"
+                                    onclick="setActive('domain', '{{ filename }}')">✓ Set as Active</button>
+                                <button type="button" class="btn btn-outline-danger"
+                                    onclick="deleteFile('domain', '{{ filename }}')">🗑 Delete</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
 {% endblock %}
 
 {% block scripts %}
+<!-- REQUIRED: Bootstrap JS for Tabs & Accordions -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-    const allData = "{{ options_data | tojson }}";
-
-    // Tab functionality
-    const tabs = document.querySelectorAll('.tab');
-    const contents = {
-        config: document.getElementById('content-config'),
-        material: document.getElementById('content-material'),
-        domain: document.getElementById('content-domain')
-    };
-
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            Object.values(contents).forEach(c => c.style.display = 'none');
-            contents[tab.dataset.tab].style.display = 'block';
-
-            // Update details for the newly active tab's current selection
-            const activeSelect = contents[tab.dataset.tab].querySelector('select');
-            if (activeSelect) {
-                updateDetails(tab.dataset.tab, activeSelect.value);
+    // ... [Your existing JavaScript functions: saveInline, setActive, etc.] ...
+    // I am including your JS functions here for completeness
+    function saveInline(event, type, filename) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const content = {};
+        for (let [key, value] of formData.entries()) {
+            if (key.endsWith('_min')) {
+                const baseKey = key.replace('_min', '');
+                const max = formData.get(baseKey + '_max');
+                setNestedValue(content, baseKey, [parseFloat(value), parseFloat(max)]);
+            } else if (!key.endsWith('_max')) {
+                const parsedValue = isNaN(value) ? value : parseFloat(value);
+                setNestedValue(content, key, parsedValue);
             }
-        });
-    });
-
-    // Details update functionality
-    const detailsEl = document.getElementById('details');
-    const selects = ['config', 'material', 'domain'].map(id => document.getElementById(id));
-
-    function updateDetails(type, filename) {
-        if (allData[type] && allData[type][filename]) {
-            detailsEl.textContent = JSON.stringify(allData[type][filename], null, 2);
-        } else {
-            detailsEl.textContent = "No details available for this file.";
         }
+        fetch('/info/save_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, filename, content })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) alert("Error: " + data.error);
+                else showToast("✓ Saved successfully!", "success");
+            })
+            .catch(err => alert("Network Error: " + err));
     }
 
-    selects.forEach(select => {
-        select.addEventListener('change', () => {
-            const type = select.id;
-            const file = select.value;
-            updateDetails(type, file);
-        });
-    });
+    function setNestedValue(obj, path, value) {
+        const keys = path.split('.');
+        let current = obj;
+        for (let i = 0; i < keys.length - 1; i++) {
+            if (!current[keys[i]]) current[keys[i]] = {};
+            current = current[keys[i]];
+        }
+        current[keys[keys.length - 1]] = value;
+    }
 
-    // Initial Load: Show details for the default selected config
-    if (selects[0].value) {
-        updateDetails('config', selects[0].value);
+    function setActive(type, filename) {
+        const payload = { [type]: filename };
+        fetch('/info/load_state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(r => r.json())
+            .then(() => {
+                showToast("✓ Configuration activated!", "success");
+                setTimeout(() => location.reload(), 1000);
+            })
+            .catch(err => alert("Error: " + err));
+    }
+
+    function createNew(type) {
+        const name = prompt(`Enter new ${type} filename (without .json):`);
+        if (!name) return;
+        fetch(`/info/defaults/${type}`)
+            .then(r => r.json())
+            .then(defaults => {
+                return fetch('/info/save_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type, filename: name, content: defaults })
+                });
+            })
+            .then(r => r.json())
+            .then(() => {
+                showToast("✓ Created successfully!", "success");
+                setTimeout(() => location.reload(), 1000);
+            })
+            .catch(err => alert("Error: " + err));
+    }
+
+    function deleteFile(type, filename) {
+        if (!confirm(`Delete ${filename}? This cannot be undone.`)) return;
+        fetch(`/info/delete_config/${type}/${filename}`, { method: 'DELETE' })
+            .then(() => location.reload())
+            .catch(err => alert("Error: " + err));
+    }
+
+    function showToast(message, type) {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} toast-notification`;
+        toast.innerHTML = `<strong>${message}</strong><button type="button" class="btn-close float-end" onclick="this.parentElement.remove()"></button>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
     }
 </script>
 {% endblock %}

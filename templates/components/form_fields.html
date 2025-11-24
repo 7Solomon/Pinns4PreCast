@@ -1,0 +1,48 @@
+{# Macro for simple number input #}
+{% macro number_field(name, value, label, unit='', min=None, max=None) %}
+<div class="mb-3">
+    <label class="form-label">{{ label }} {% if unit %}<span class="text-muted">({{ unit }})</span>{% endif %}</label>
+    <input type="number" class="form-control" name="{{ name }}" value="{{ value }}" {% if min is not none
+        %}min="{{ min }}" {% endif %} {% if max is not none %}max="{{ max }}" {% endif %} step="any">
+</div>
+{% endmacro %}
+
+{# Macro for text input #}
+{% macro text_field(name, value, label) %}
+<div class="mb-3">
+    <label class="form-label">{{ label }}</label>
+    <input type="text" class="form-control" name="{{ name }}" value="{{ value }}">
+</div>
+{% endmacro %}
+
+{# Macro for list/array input (e.g., domain ranges) #}
+{% macro range_field(name, value, label, unit='') %}
+<div class="mb-3">
+    <label class="form-label">{{ label }} {% if unit %}<span class="text-muted">({{ unit }})</span>{% endif %}</label>
+    <div class="input-group">
+        <input type="number" class="form-control" name="{{ name }}_min" value="{{ value[0] }}" placeholder="Min"
+            step="any">
+        <span class="input-group-text">to</span>
+        <input type="number" class="form-control" name="{{ name }}_max" value="{{ value[1] }}" placeholder="Max"
+            step="any">
+    </div>
+</div>
+{% endmacro %}
+
+{# Macro for dict of sensor points #}
+{% macro sensor_dict_field(name, value, label) %}
+<div class="mb-3">
+    <label class="form-label">{{ label }}</label>
+    <div class="border rounded p-2 bg-light" style="max-height: 200px; overflow-y: auto;">
+        {% for key, coords in value.items() %}
+        <div class="d-flex gap-2 mb-2 align-items-center">
+            <span class="badge bg-secondary">{{ key }}</span>
+            <input type="text" class="form-control form-control-sm" name="{{ name }}[{{ key }}]" value="{{ coords }}"
+                placeholder="[x, y, z]">
+        </div>
+        {% endfor %}
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addSensor('{{ name }}')">+ Add
+        Sensor</button>
+</div>
+{% endmacro %}

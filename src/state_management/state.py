@@ -171,12 +171,16 @@ class DirectoryManager:
     @property
     def log_path(self):
         """Full path to logs directory"""
-        return os.path.join(self.runs_path, self.run_idx_path, 'logs')
+        return os.path.join(self.runs_path, self.run_idx_path, 'metrics.csv')
+    def get_log_path(self, idx):
+        return os.path.join(self.runs_path, idx, 'metrics.csv')
     
     @property
-    def log_name(self):
-        """Just the run folder name for TensorBoardLogger"""
-        return self.run_idx_path if self.run_idx_path else None
+    def status_path(self):
+        return os.path.join(self.runs_path, self.run_idx_path, 'status.json')
+    def get_status_path(self, idx):
+        return os.path.join(self.runs_path, idx, 'status.json')
+
     
     @property
     def vtk_path(self):

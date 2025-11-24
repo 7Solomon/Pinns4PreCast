@@ -192,12 +192,8 @@
         fetch(`/info/run/${runId}/log`)
             .then(r => r.json())
             .then(data => {
-                if (data.status !== 'running' && data.status !== 'initialized') {
-                    clearInterval(activeInterval);
-                }
-                if (!data.history || data.history.length === 0) return;
+                // ... (keep existing checks) ...
 
-                // Helper to filter nulls for cleaner plots
                 const getTraceData = (key) => {
                     return {
                         x: data.history.map(h => h[key] !== null ? h.step : null),
@@ -207,38 +203,85 @@
 
                 const traces = [];
 
-                // --- TRAINING LOSSES (Lines) ---
-                // 1. Total Loss
+                // --- GROUP 1: MAIN LOSSES (Thick Lines) ---
                 const tLoss = getTraceData('loss');
                 traces.push({
                     x: tLoss.x, y: tLoss.y,
                     name: 'Total Loss', mode: 'lines',
-                    line: { color: 'black', width: 2 }
+                    line: { color: 'black', width: 3 },
+                    legendgroup: 'total'
                 });
 
-                // 2. Physics Loss
+                // --- GROUP 2: PHYSICS BREAKDOWN (Blues) ---
                 const pLoss = getTraceData('loss_physics');
                 traces.push({
                     x: pLoss.x, y: pLoss.y,
-                    name: 'Physics', mode: 'lines',
-                    line: { color: '#1f77b4', dash: 'dot' } // Blue dotted
+                    name: 'Phys Total', mode: 'lines',
+                    line: { color: '#1f77b4', width: 2 },
+                    legendgroup: 'physics'
                 });
 
-                // 3. BC Loss
+                const pLossTemp = getTraceData('loss_phys_temperature');
+                traces.push({
+                    x: pLossTemp.x, y: pLossTemp.y,
+                    name: 'Phys (Temp)', mode: 'lines',
+                    line: { color: '#aec7e8', dash: 'dot' }, // Light Blue Dotted
+                    legendgroup: 'physics'
+                });
+
+                const pLossAlpha = getTraceData('loss_phys_alpha');
+                traces.push({
+                    x: pLossAlpha.x, y: pLossAlpha.y,
+                    name: 'Phys (Alpha)', mode: 'lines',
+                    line: { color: '#1f77b4', dash: 'dot' }, // Dark Blue Dotted
+                    legendgroup: 'physics'
+                });
+
+                // --- GROUP 3: BC BREAKDOWN (Oranges) ---
                 const bLoss = getTraceData('loss_bc');
                 traces.push({
                     x: bLoss.x, y: bLoss.y,
-                    name: 'BC', mode: 'lines',
-                    line: { color: '#ff7f0e', width: 1 } // Orange thin
+                    name: 'BC Total', mode: 'lines',
+                    line: { color: '#ff7f0e', width: 2 },
+                    legendgroup: 'bc'
                 });
 
-                // 4. IC Loss
+                // BC Temp (Only one BC usually, so maybe redundant, but good for completeness)
+                const bLossTemp = getTraceData('loss_bc_temperature');
+                if (bLossTemp.y.some(v => v != null)) {
+                    traces.push({
+                        x: bLossTemp.x, y: bLossTemp.y,
+                        name: 'BC (Temp)', mode: 'lines',
+                        line: { color: '#ffbb78', dash: 'dot' },
+                        legendgroup: 'bc'
+                    });
+                }
+
+                // --- GROUP 4: IC BREAKDOWN (Greens) ---
                 const iLoss = getTraceData('loss_ic');
                 traces.push({
                     x: iLoss.x, y: iLoss.y,
-                    name: 'IC', mode: 'lines',
-                    line: { color: '#2ca02c', width: 1 } // Green thin
+                    name: 'IC Total', mode: 'lines',
+                    line: { color: '#2ca02c', width: 2 },
+                    legendgroup: 'ic'
                 });
+
+                const iLossTemp = getTraceData('loss_ic_temperature');
+                traces.push({
+                    x: iLossTemp.x, y: iLossTemp.y,
+                    name: 'IC (Temp)', mode: 'lines',
+                    line: { color: '#98df8a', dash: 'dot' }, // Light Green Dotted
+                    legendgroup: 'ic'
+                });
+
+                const iLossAlpha = getTraceData('loss_ic_alpha');
+                traces.push({
+                    x: iLossAlpha.x, y: iLossAlpha.y,
+                    name: 'IC (Alpha)', mode: 'lines',
+                    line: { color: '#98df8a', dash: 'dot' },
+                    legendgroup: 'ic'
+                });
+
 
                 // --- VALIDATION LOSSES (Markers/Dots) ---
                 // These only appear every N epochs, so we use connectgaps: false implicitly
@@ -258,14 +301,14 @@
                 const layout = {
                     margin: { t: 30, l: 60, r: 20, b: 40 },
                     showlegend: true,
-                    legend: { orientation: 'h', y: 1.1 }, // Legend on top
+                    // Group legend items to save vertical space
+                    legend: { orientation: 'h', y: 1.1, tracegroupgap: 5 },
                     yaxis: {
-                        type: 'log', // LOG SCALE ENABLED
+                        type: 'log',
                         title: 'Loss (Log Scale)',
                         autorange: true
                     },
                     xaxis: { title: 'Steps' },
-                    // Enable nicer interaction
                     dragmode: 'pan'
                 };
 
@@ -351,10 +394,18 @@
             xaxis: { title: 'Time (hours)' },
             yaxis: { title: isTemp ? 'Temperature (°C)' : 'Degree of Hydration' },
             showlegend: true,
-            legend: { orientation: 'h', y: -0.2 } // Horizontal legend at bottom
+            legend: { orientation: 'h', y: -0.2 }, // Horizontal legend at bottom
+
+            dragmode: 'pan'
         };
 
-        Plotly.newPlot(`vis-container-${runId}`, traces, layout);
+        const config = {
+            responsive: true,
+            scrollZoom: true, // ENABLE SCROLL ZOOM
+            displayModeBar: true,
+        };
+
+        Plotly.newPlot(`vis-container-${runId}`, traces, layout, config);
     }
 
     function parseCSV(csvText) {

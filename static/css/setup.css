@@ -1,0 +1,379 @@
+/* ===========================
+   Configuration Setup Page Styles
+   =========================== */
+
+/* Active State Badge Bar */
+.alert.d-flex {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.alert .badge {
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+/* Tab Navigation Styling */
+.nav-tabs {
+    border-bottom: 2px solid var(--border-light);
+    margin-bottom: 0;
+    background: white;
+    padding: 15px 15px 0 15px;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-dark);
+    border: none;
+    padding: 12px 24px;
+    margin-right: 5px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-weight: 500;
+    transition: var(--transition);
+    position: relative;
+    bottom: -2px;
+}
+
+.nav-tabs .nav-link:hover {
+    background: var(--lighter-bg);
+    color: var(--primary-color);
+}
+
+.nav-tabs .nav-link.active {
+    background: white;
+    color: var(--primary-color);
+    font-weight: 600;
+    border-bottom: 2px solid white;
+}
+
+/* Tab Content Container */
+.tab-content.card {
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    border: 1px solid var(--border-light);
+    border-top: none;
+    padding: 0;
+    box-shadow: var(--shadow-md);
+}
+
+/* Tab Pane Header */
+.tab-pane .border-bottom {
+    background: var(--lighter-bg);
+}
+
+.tab-pane h5 {
+    color: var(--text-dark);
+    font-weight: 600;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* Accordion Styling */
+.accordion-flush .accordion-item {
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 0;
+    transition: var(--transition);
+}
+
+.accordion-flush .accordion-item:last-child {
+    border-bottom: none;
+}
+
+.accordion-flush .accordion-item:hover {
+    background: var(--lighter-bg);
+}
+
+/* Accordion Headers */
+.accordion-button {
+    font-weight: 600;
+    color: var(--text-dark);
+    padding: 18px 20px;
+    background: white;
+    transition: var(--transition);
+    border: none;
+}
+
+.accordion-button:not(.collapsed) {
+    background: var(--lighter-bg);
+    color: var(--primary-color);
+    box-shadow: none;
+}
+
+.accordion-button:focus {
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    border-color: var(--primary-color);
+    z-index: 3;
+}
+
+/* Active Config Highlight */
+.accordion-button.bg-success-subtle {
+    background: linear-gradient(90deg, #d4edda 0%, white 100%) !important;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.accordion-button.bg-success-subtle:not(.collapsed) {
+    background: linear-gradient(90deg, #d4edda 0%, var(--lighter-bg) 100%) !important;
+}
+
+.accordion-button.bg-success-subtle .badge {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+/* Accordion Body with Scroll Control */
+.accordion-body {
+    padding: 25px;
+    background: white;
+    max-height: 70vh;
+    /* Responsive height */
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Custom Scrollbar */
+.accordion-body::-webkit-scrollbar {
+    width: 10px;
+}
+
+.accordion-body::-webkit-scrollbar-track {
+    background: var(--lighter-bg);
+    border-radius: 5px;
+    margin: 5px;
+}
+
+.accordion-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 5px;
+    border: 2px solid var(--lighter-bg);
+}
+
+.accordion-body::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+
+/* Form Layout */
+.accordion-body form {
+    display: grid;
+    gap: 18px;
+}
+
+/* Form Section Headers */
+.form-section-header {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-dark);
+    margin: 24px 0 16px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+}
+
+.form-section-header:first-child {
+    margin-top: 0;
+}
+
+.form-section-header::before {
+    content: "";
+    width: 4px;
+    height: 18px;
+    background: var(--primary-color);
+    margin-right: 10px;
+    border-radius: 2px;
+}
+
+/* Form Groups - Override Bootstrap Margins */
+.accordion-body .mb-3 {
+    margin-bottom: 0 !important;
+}
+
+/* Form Labels */
+.accordion-body .form-label {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-dark);
+    margin-bottom: 6px;
+}
+
+.accordion-body .form-label .text-muted {
+    font-weight: 400;
+    font-size: 13px;
+    color: var(--text-light);
+}
+
+/* Form Inputs */
+.accordion-body .form-control {
+    padding: 10px 14px;
+    font-size: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.accordion-body .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+/* Input Groups (Range Fields) */
+.input-group {
+    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius-sm);
+}
+
+.input-group .form-control {
+    border: 1px solid var(--border-color);
+}
+
+.input-group-text {
+    background: var(--lighter-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-dark);
+    font-weight: 500;
+    font-size: 13px;
+}
+
+/* Sensor Dictionary Container */
+.sensor-list-container {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 12px;
+    background: var(--lighter-bg);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+}
+
+.sensor-item {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.sensor-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+    transform: translateX(3px);
+}
+
+.sensor-item:last-child {
+    margin-bottom: 0;
+}
+
+.sensor-item .badge {
+    min-width: 55px;
+    text-align: center;
+    font-size: 12px;
+    padding: 6px 10px;
+}
+
+.sensor-item .form-control {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+/* Action Buttons Container */
+.accordion-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid var(--border-light);
+    flex-wrap: wrap;
+}
+
+.accordion-actions .btn {
+    flex: 1;
+    min-width: 120px;
+}
+
+/* Toast Notifications */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 300px;
+    padding: 15px 20px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Empty State (No configs) */
+.empty-accordion-state {
+    text-align: center;
+    padding: 60px 40px;
+    color: var(--text-light);
+}
+
+.empty-accordion-state i {
+    font-size: 64px;
+    opacity: 0.2;
+    margin-bottom: 20px;
+    display: block;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .accordion-body {
+        max-height: 60vh;
+        padding: 20px;
+    }
+
+    .accordion-actions {
+        flex-direction: column;
+    }
+
+    .accordion-actions .btn {
+        width: 100%;
+    }
+
+    .nav-tabs {
+        padding: 10px 10px 0 10px;
+    }
+
+    .nav-tabs .nav-link {
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+}

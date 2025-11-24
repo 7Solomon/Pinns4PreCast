@@ -104,6 +104,9 @@ class DeepONetSolver(SingleSolverInterface):
         loss_heat = torch.mean(heat_residual.as_subclass(torch.Tensor) ** 2)
         loss_alpha = torch.mean(alpha_residual.as_subclass(torch.Tensor) ** 2)
         
+        self.log('loss_phys_temperature', loss_heat)
+        self.log('loss_phys_alpha', loss_alpha)
+        
         return loss_heat + loss_alpha
 
     def loss_bc(self, batch):
@@ -128,6 +131,8 @@ class DeepONetSolver(SingleSolverInterface):
         
         # MSE between predicted and target temperature
         loss = torch.nn.functional.mse_loss(pred_T, bc_target_temperature)
+
+        self.log('loss_bc_temperature', loss)
         
         return loss
 
@@ -156,7 +161,10 @@ class DeepONetSolver(SingleSolverInterface):
         # IC losses
         loss_T = torch.nn.functional.mse_loss(pred_T, ic_target_temperature)        
         loss_alpha = torch.nn.functional.mse_loss(pred_alpha, ic_target_alpha)
-        
+
+        self.log('loss_ic_temperature', loss_T)
+        self.log('loss_ic_alpha', loss_alpha)
+    
         return loss_T + loss_alpha
     
     def optimization_cycle(self, batch):
@@ -202,9 +210,9 @@ class DeepONetSolver(SingleSolverInterface):
         )
         
         # Log losses
-        self.log('loss_physics', loss_p)
-        self.log('loss_bc', loss_b)
-        self.log('loss_ic', loss_i)
+        #self.log('loss_physics', loss_p)
+        #self.log('loss_bc', loss_b)
+        #self.log('loss_ic', loss_i)
         
         self.log('loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 

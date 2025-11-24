@@ -1,10 +1,15 @@
-from flask import Blueprint, jsonify
+from dataclasses import field, fields
+from flask import Blueprint, jsonify, request
 import os
 import json
 import pandas as pd
 
 from src.state_management.state import State
 from src.utils import read_files_to_map
+from src.state_management.config import Config
+from src.state_management.domain import DomainVariables
+from src.state_management.material import ConcreteData
+
 
 info_bp = Blueprint('info', __name__, url_prefix='/info')
 
@@ -41,9 +46,8 @@ def get_all_runs():
 @info_bp.route('/run/<run_id>/log', methods=['GET'])
 def get_run_data(run_id):
     """Returns parsed CSV data for the chart"""
-    run_path = os.path.join(State().directory_manager.runs_path, run_id)
-    csv_path = os.path.join(run_path, 'metrics.csv')
-    status_path = os.path.join(run_path, 'status.json')
+    csv_path = State().directory_manager.get_log_path(run_id)
+    status_path = State().directory_manager.get_status_path(run_id)
     
     data = {"status": "unknown", "history": []}
     
@@ -76,3 +80,83 @@ def get_run_sensor_vis(run_id):
         "temperature": read_files_to_map(temp_path),
         "alpha": read_files_to_map(alpha_path)
     })
+
+
+
+@info_bp.route('/save_config', methods=['POST'])
+def save_config():
+    """
+    Saves a JSON configuration file to disk.
+    Expects JSON: { "type": "config|material|domain", "filename": "name.json", "content": {...} }
+    """
+    try:
+        data = request.get_json()
+        file_type = data.get('type')
+        filename = data.get('filename')
+        content = data.get('content')
+
+        if not all([file_type, filename, content]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        # Ensure filename ends with .json
+        if not filename.endswith('.json'):
+            filename += '.json'
+
+        # Determine path based on type
+        dm = State().directory_manager
+        if file_type == 'config':
+            base_path = dm.configs_path
+        elif file_type == 'material':
+            base_path = dm.materials_path
+        elif file_type == 'domain':
+            base_path = dm.domains_path
+        else:
+            return jsonify({"error": "Invalid type"}), 400
+
+        # Validate JSON content
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except json.JSONDecodeError:
+                return jsonify({"error": "Invalid JSON syntax"}), 400
+
+        # Save to file
+        full_path = os.path.join(base_path, filename)
+        with open(full_path, 'w') as f:
+            json.dump(content, f, indent=4)
+
+        return jsonify({"message": f"Successfully saved {filename}", "filename": filename})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@info_bp.route('/defaults/<config_type>', methods=['GET'])
+def get_defaults(config_type):
+    """Returns default values from Python dataclasses"""
+    from dataclasses import asdict
+    
+    class_mapping = {
+        'config': Config,
+        'material': ConcreteData,
+        'domain': DomainVariables
+    }
+    
+    if config_type not in class_mapping:
+        return jsonify({"error": "Invalid type"}), 400
+    
+    default_instance = class_mapping[config_type]()
+    return jsonify(asdict(default_instance))
+
+def _extract_fields(cls):
+    """Extract field metadata from dataclass"""
+    field_info = {}
+    
+    for f in fields(cls):
+        field_info[f.name] = {
+            'type': f.metadata.get('type', 'number' if f.type in [int, float] else 'text'),
+            'label': f.metadata.get('label', f.name.replace('_', ' ').title()),
+            'unit': f.metadata.get('unit', ''),
+            'default': f.default if f.default is not field.default_factory else f.default_factory()
+        }
+    
+    return field_info

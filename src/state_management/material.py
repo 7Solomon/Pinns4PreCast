@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.class_definition.base_state import BaseState
     
@@ -11,19 +11,19 @@ class BasePhysics(BaseState):
 
 @dataclass
 class ConcreteData(BasePhysics):
-    name: str = "Normaler Beton"
+    name: str = field(default="Normaler Beton", metadata={"label": "Material Name", "type": "text"})
 
-    cp: float = 8.5e2 # [J/(kg*K)]
-    rho: float = 2.4e3  # [kg/m^3]
-    k: float = 1.4 # [W/(m*K)]
+    cp: float = field(default=8.5e2, metadata={"label": "Specific Heat", "unit": "J/(kg·K)", "type": "number"})
+    rho: float = field(default=2.4e3, metadata={"label": "Density", "unit": "kg/m³", "type": "number"})
+    k: float = field(default=1.4, metadata={"label": "Thermal Conductivity", "unit": "W/(m·K)", "type": "number"})
 
-    Q_pot: float = 500e3  # [J/kg]
-    B1: float = 0.0002916  # [1/s]
-    B2: float = 0.0024229  # [1/s]
-    deg_hydr_max: float = 0.875  # [-]
-    eta: float = 5.554  # [-]
+    Q_pot: float = field(default=500e3, metadata={"label": "Potential Heat", "unit": "J/kg", "type": "number"})
+    B1: float = field(default=0.0002916, metadata={"label": "B1 Reaction Rate", "unit": "1/s", "type": "number"})
+    B2: float = field(default=0.0024229, metadata={"label": "B2 Reaction Rate", "unit": "1/s", "type": "number"})
+    deg_hydr_max: float = field(default=0.875, metadata={"label": "Max Degree Hydration", "type": "number"})
+    eta: float = field(default=5.554, metadata={"label": "Eta", "type": "number"})
 
-    cem: float = 300.0  # [kg/m^3]
+    cem: float = field(default=300.0, metadata={"label": "Cement Content", "unit": "kg/m³", "type": "number"})
 
     @property
     def Ea(self) -> float:
