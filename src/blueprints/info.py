@@ -1,4 +1,5 @@
 from dataclasses import field, fields
+from typing import Any, Dict, List, get_origin
 from flask import Blueprint, jsonify, request
 import os
 import json
@@ -148,15 +149,65 @@ def get_defaults(config_type):
     return jsonify(asdict(default_instance))
 
 def _extract_fields(cls):
-    """Extract field metadata from dataclass"""
+    """Extract field metadata from dataclass with automatic JSON type detection."""
     field_info = {}
     
     for f in fields(cls):
+        origin = get_origin(f.type)
+        actual_type = origin if origin is not None else f.type
+        
+        if 'type' in f.metadata:
+            ui_type = f.metadata['type']
+        elif actual_type in (dict, Dict):
+            ui_type = 'dict'
+        elif actual_type in (int, float):
+            ui_type = 'number'
+        elif actual_type in (list, List):
+            ui_type = 'list'
+        elif actual_type == bool:
+            ui_type = 'checkbox' 
+        else:
+            ui_type = 'text'
+
+        # 3. Build the schema
         field_info[f.name] = {
-            'type': f.metadata.get('type', 'number' if f.type in [int, float] else 'text'),
+            'type': ui_type,
             'label': f.metadata.get('label', f.name.replace('_', ' ').title()),
             'unit': f.metadata.get('unit', ''),
-            'default': f.default if f.default is not field.default_factory else f.default_factory()
+            'default': f.default if f.default is not Any else None 
         }
-    
+        
+        from dataclasses import MISSING
+        if field_info[f.name]['default'] is MISSING:
+            if f.default_factory is not MISSING:
+                field_info[f.name]['default'] = f.default_factory()
+            else:
+                field_info[f.name]['default'] = None
     return field_info
+
+
+@info_bp.route('/load_state', methods=['POST'])
+def load_state():
+    """Updates current_state.json to point to the new active files."""
+    try:
+        data = request.get_json()
+        
+        states_file = State().directory_manager.states_file
+
+        # 1. Read existing state
+        current_state = {}
+        if os.path.exists(states_file):
+            with open(states_file, 'r') as f:
+                current_state = json.load(f)
+
+        current_state.update(data)
+
+        with open(states_file, 'w') as f:
+            json.dump(current_state, f, indent=4)
+
+
+        return jsonify({"status": "success", "active_state": current_state})
+
+    except Exception as e:
+        print(f"Error loading state: {e}")
+        return jsonify({"error": str(e)}), 500

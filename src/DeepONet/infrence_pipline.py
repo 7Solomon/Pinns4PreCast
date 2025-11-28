@@ -11,6 +11,12 @@ from src.utils import unscale_T
 from src.state_management.state import State
 
 
+""""
+
+    Functions for the infrence Call of a model so Point grid creation and then the Visulasation of the output
+
+"""
+
 def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 
                      n_spatial=15, n_time=30):
     """

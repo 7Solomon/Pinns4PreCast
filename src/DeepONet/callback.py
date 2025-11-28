@@ -11,6 +11,9 @@ from src.utils import unscale_T
 
 
 class VisualizationCallback(Callback):
+    """
+        THIS is so that every 10 EPOCHS a csv file is exported for visualization of the SENSOR POINTs
+    """
     def __init__(self, vtk_path, sensor_temp_path, sensor_alpha_path, plot_every_n_epochs=10):
         self.vtk_path = vtk_path
         self.sensor_temp_path = sensor_temp_path

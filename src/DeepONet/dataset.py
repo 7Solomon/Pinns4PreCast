@@ -50,9 +50,11 @@ def eval_random_field(points, k, phi, A, offset):
     
     return offset + noise
 
+
+
 class DeepONetDataset(Dataset):
     """
-    A map-style dataset for Physics-Informed DeepONet.
+        THE dataset Generation where the random field samples are created for BC and IC and also the BC and IC points for LOSS calculation
     """
     def __init__(self, problem, n_pde, n_ic, n_bc_face, num_samples, num_sensors_bc, num_sensors_ic):
         self.problem = problem
@@ -113,19 +115,19 @@ class DeepONetDataset(Dataset):
         #bc_T_vals = bc_T_vals.as_subclass(torch.Tensor)
 
         return {
-            "bc_sensor_values": bc_T_sensors_vals,
-            "ic_sensor_values": ic_T_sensors_vals,
-            "pde_coords": pde_pts,             
-            "ic_coords": ic_loss_pts,               
-            "bc_coords": bc_loss_pts,               
-            "ic_target_temperature": ic_T_target_vals, 
-            "ic_target_alpha": ic_target_alpha_vals,
-            "bc_target_temperature": bc_T_target_vals,
+            "bc_sensor_values": bc_T_sensors_vals,  # THIS IS THE input to the Branch 1
+            "ic_sensor_values": ic_T_sensors_vals,  # THIS IS THE input to the Branch 2
+            "pde_coords": pde_pts,                   # THIS IS THE input to the Trunk
+            "ic_coords": ic_loss_pts,                  # THIS IS the IC points for LOSS calculation
+            "bc_coords": bc_loss_pts,                   # THIS IS the BC points for LOSS calculation
+            "ic_target_temperature": ic_T_target_vals,  # THIS IS the IC target values for LOSS calculation
+            "ic_target_alpha": ic_target_alpha_vals,    # THIS IS the IC target alpha values for LOSS calculation
+            "bc_target_temperature": bc_T_target_vals,  # THIS IS the BC target values for LOSS calculation
         }
     
 
 def deeponet_collate_fn(batch):
-    """Custom collate function."""
+    """Custom collate function.  TO CREATE BATCHes"""
     return {
         "bc_sensor_values": torch.stack([item["bc_sensor_values"] for item in batch]),
         "ic_sensor_values": torch.stack([item["ic_sensor_values"] for item in batch]),

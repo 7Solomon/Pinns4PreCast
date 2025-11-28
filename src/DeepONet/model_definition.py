@@ -1,15 +1,16 @@
 import torch.nn as nn
 import torch
 
+from src.DeepONet.fourier_features import FourierFeatureEncoding
+
 class FlexDeepONet(nn.Module):
-    def __init__(self, branch_configs, trunk_config, num_outputs=2, latent_dim=256, activation=None):
-        """
-        Args:
-            branch_configs (list[dict]): Configs for each branch (BC, IC).
-            trunk_config (dict): Config for trunk.
-            num_outputs (int): Output fields (T, alpha).
-            latent_dim (int): Dimension of the latent space.
-        """
+
+    """
+        This is a custome Neural Network class for a FlexDeepONet architecture, that allows multiple branch networks with different input sizes
+        as well as 2 outputs (Temperature and Hydration Degree).
+    """
+
+    def __init__(self, branch_configs, trunk_config, num_outputs=2, latent_dim=256, activation=None, fourier_features=None):
         super().__init__()
         self.num_outputs = num_outputs
         self.latent_dim = latent_dim
@@ -21,7 +22,7 @@ class FlexDeepONet(nn.Module):
             branch_act = activation or nn.Tanh
             trunk_act = activation or nn.SiLU
 
-        # BRANCH NETWORKS
+        # ========== BRANCH NETWORKS ==========
         self.branch_nets = nn.ModuleList()
         self.num_branches = len(branch_configs)
         
@@ -35,23 +36,28 @@ class FlexDeepONet(nn.Module):
                 layers.append(branch_act())
                 in_dim = h
             
-            # OUTPUT LAYER: Project to 'latent_dim'
             layers.append(nn.Linear(in_dim, latent_dim))
             self.branch_nets.append(nn.Sequential(*layers))
+        
+        # ========== FOURIER ENCODING (TRUNK INPUT) ==========
+        if fourier_features is not None:
+            self.fourier_encoding = FourierFeatureEncoding(**fourier_features)
+            # Fourier features: [sin(2πZx), cos(2πZx)] → 2 * mapping_size
+            trunk_input_size = 2 * fourier_features['mapping_size']
+        else:
+            self.fourier_encoding = None
+            trunk_input_size = trunk_config['input_size']
 
-        # TRUNK NETWORK
-        # CONCAT branches, so effective latent size is latent_dim * num_branches
+        # ========== TRUNK NETWORK ==========
         layers = []
-        in_dim = trunk_config['input_size']
+        in_dim = trunk_input_size
         hidden = trunk_config.get('hidden_layers', [128, 128])
         
         for h in hidden:
             layers.append(nn.Linear(in_dim, h))
             layers.append(trunk_act())
             in_dim = h
-            
-        # TRUNK OUTPUT:
-        # Trunk Output Size is (latent_dim * num_branches) * num_outputs
+        
         self.trunk_output_dim = (latent_dim * self.num_branches) * num_outputs
         layers.append(nn.Linear(in_dim, self.trunk_output_dim))
         
@@ -61,21 +67,22 @@ class FlexDeepONet(nn.Module):
     def forward(self, branch_inputs, trunk_input):
         batch_size, num_points, coord_dim = trunk_input.shape
         
-        # --- A. Process Branches ---
+        # ========== BRANCHES ==========
         branch_outputs = []
         for i, branch_net in enumerate(self.branch_nets):
-            # Shape: [batch_size, latent_dim]
             branch_outputs.append(branch_net(branch_inputs[i]))
-            
-        # Shape: [batch_size, latent_dim * num_branches]
+        
         branch_combined = torch.cat(branch_outputs, dim=1)
         
-        # TRUNK
-        # [batch_size * num_points, coord_dim]
-        trunk_input_flat = trunk_input.reshape(batch_size * num_points, coord_dim)
+        # ========== FOURIER ENCODING (TRUNK) ==========
+        if self.fourier_encoding is not None:
+            trunk_input = self.fourier_encoding(trunk_input)  # [batch, points, 128]
+        
+        # ========== TRUNK FORWARD ==========
+        # coord_dim either 4 or 128 (if FOURIER)
+        trunk_input_flat = trunk_input.reshape(batch_size * num_points, -1)
         trunk_output = self.trunk_net(trunk_input_flat)
         
-        # [batch_size, num_points, (latent_dim * num_branches), num_outputs]
         trunk_output = trunk_output.reshape(
             batch_size, 
             num_points, 
@@ -83,14 +90,9 @@ class FlexDeepONet(nn.Module):
             self.num_outputs
         )
 
-        # Branch: [batch_size, latent_dim_total] -> [batch_size, 1, latent_dim_total, 1]
+        # ========== BRANCH-TRUNK INTERACTION ==========
         branch_combined = branch_combined.unsqueeze(1).unsqueeze(-1)
-        
-        # Multiply: [batch_size, num_points, latent_dim_total, num_outputs]
         product = trunk_output * branch_combined
-        
-        # Sum over the latent dimension to get final prediction
-        # Shape: [batch_size, num_points, num_outputs]
         output = product.sum(dim=2)
         
         return output

@@ -39,6 +39,47 @@ body {
     color: var(--text-dark);
 }
 
+/* JSON Editor Styling */
+.json-field-wrapper {
+    background: white;
+    padding: 15px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+    transition: var(--transition);
+}
+
+.json-field-wrapper:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.json-editor-container {
+    height: 300px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.json-editor-container .jsoneditor {
+    border: none;
+}
+
+.json-editor-container .jsoneditor-menu {
+    background-color: var(--primary-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.json-editor-container .jsoneditor-tree {
+    background: #fafafa;
+}
+
+/* Compact view for nested dictionaries */
+.json-editor-container .jsoneditor-field,
+.json-editor-container .jsoneditor-value {
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-size: 13px;
+}
+
 /* ===========================
    Sidebar
    =========================== */

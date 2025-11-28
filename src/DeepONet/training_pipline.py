@@ -9,6 +9,8 @@ from pina.optim import TorchOptimizer
 class DeepONetSolver(SingleSolverInterface):
     """
     Custom solver for Physics-Informed DeepONet training.
+
+    SO THAT WE CAN HAVE CUSTOM LOSS FUNCTIONS FOR BC, IC AND PDE RESIDUAL
     """
 
     accepted_conditions_types = (DomainEquationCondition, Condition)
@@ -19,7 +21,8 @@ class DeepONetSolver(SingleSolverInterface):
         model,
         optimizer=None,
         scheduler=None,
-        loss_weights={'physics': 1.0, 'bc': 1.0, 'ic': 1.0}
+        loss_weights={'physics': 1.0, 'bc': 1.0, 'ic': 1.0},
+        time_weighted_loss=None
     ):
         """
         Args:
@@ -41,6 +44,7 @@ class DeepONetSolver(SingleSolverInterface):
             use_lt=False  # FOR LabelTensor conversion but we do manually
         )
         self.loss_weights = loss_weights
+        self.time_weighted_loss = time_weighted_loss
 
     def setup(self, stage):
         """Override setup to avoid PINA-specific trainer attributes."""  # JUST PASS BECAUSE 
@@ -100,9 +104,14 @@ class DeepONetSolver(SingleSolverInterface):
         alpha_residual = self.problem.conditions['physi_alpha'].equation.residual(
             pde_coords_labeled, pred_labeled
         )
-        
-        loss_heat = torch.mean(heat_residual.as_subclass(torch.Tensor) ** 2)
-        loss_alpha = torch.mean(alpha_residual.as_subclass(torch.Tensor) ** 2)
+
+        time_weight = 1.0
+        if self.time_weighted_loss and 'time_decay_rate' in self.time_weighted_loss:
+            t = pde_coords_flat[..., 3]
+            time_weight = torch.exp(-self.time_weighted_loss['time_decay_rate'] * t)
+
+        loss_heat = torch.mean((heat_residual.as_subclass(torch.Tensor)**2) * time_weight)
+        loss_alpha = torch.mean((alpha_residual.as_subclass(torch.Tensor)**2) * time_weight)
         
         self.log('loss_phys_temperature', loss_heat)
         self.log('loss_phys_alpha', loss_alpha)

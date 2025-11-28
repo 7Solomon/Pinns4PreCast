@@ -6,6 +6,9 @@ from lightning.pytorch.loggers import Logger
 from lightning.pytorch.utilities import rank_zero_only
 
 class DashboardLogger(Logger):
+    """"
+        This is a Custome Logger that writes to a CSV file and a status JSON file for the HTML page to read from
+    """
     def __init__(self, save_dir, version=None):
         super().__init__()
         self._save_dir = save_dir

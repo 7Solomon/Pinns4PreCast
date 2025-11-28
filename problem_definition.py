@@ -36,7 +36,9 @@ def alpha_pde(input_, output_):
     hydration_rate_val = hydration_rate(input_, output_)
     alpha = output_.extract(["alpha"])
     d_alpha_dt = grad(alpha, input_, components=["alpha"], d=["t"])
-    
+
+    d_alpha_dt = torch.clamp(d_alpha_dt, min=0.0)   # BECAUSE OF CANT DECREASE
+
     return  hydration_rate_val * State().domain.t_c - d_alpha_dt  # NON DIM ???, da beide mal 1/tc
 
 def heat_generation_through_hydration(input_, output_):

@@ -1,10 +1,11 @@
 import json
 import pandas as pd
 import torch
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, redirect, request, jsonify, url_for
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from pina.optim import TorchOptimizer
+from pina.model import DeepONet, FeedForward
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
@@ -26,7 +27,11 @@ CONSOLE_OUTPUT = False
 
 
 @api_bp.route('/define_model', methods=['POST'])
-def define_model():
+def define_model_basic():
+    return redirect(url_for('api.define_model_flexnet'))
+
+@api_bp.route('/define_model_flexnet', methods=['POST'])
+def define_flex_model():
     """
     Define the FlexDeepONet model and problem instance using data from the request.
     """
@@ -38,7 +43,35 @@ def define_model():
         trunk_config=State().config.model.trunk_config,
         num_outputs=State().config.model.num_outputs,
         latent_dim=State().config.model.latent_dim,
-        activation=State().config.model.activation
+        activation=State().config.model.activation,
+        fourier_features=State().config.model.fourier_features
+    )
+    problem = HeatODE()
+    
+    # STATE SETTING
+    State().model = model
+    State().problem = problem
+    return jsonify({"message": "Model and problem defined successfully"})
+
+@api_bp.route('/define_model_pina', methods=['POST'])
+def define_model_pina():
+    total_sensors = State().config.model.num_sensors_bc + State().config.model.num_sensors_ic 
+
+    raise NotImplementedError("To Use PINA DeepONet model, the dataloader aswell as the output pipiline needs an change.")
+    model = DeepONet(
+        net_branch = FeedForward(
+            input_dimension=total_sensors, 
+            output_dimension=State().config.model.latent_dim,
+            layers=[256, 256, 256],
+            func=torch.nn.Tanh
+        ),
+        net_trunk = FeedForward(
+            input_dimension=4, # x,y,z,t
+            output_dimension=State().config.model.latent_dim,
+            layers=[256, 256, 256],
+            func=torch.nn.SiLU
+        ),
+        reduction='sum',
     )
     problem = HeatODE()
     
@@ -69,14 +102,16 @@ def define_training_pipeline():
         train_dataset,
         batch_size=State().config.dataset.batch_size,
         shuffle=True,
-        collate_fn=deeponet_collate_fn
+        collate_fn=deeponet_collate_fn,
+        num_workers=State().config.dataset.num_workers
     )
     solver = DeepONetSolver(
         model=State().model,
         problem=State().problem,
         optimizer=State().config.training.optimizer,
         scheduler=State().config.training.scheduler,
-        loss_weights=State().config.training.loss_weights
+        loss_weights=State().config.training.loss_weights,
+        time_weighted_loss=State().config.training.time_weighted_loss
     )
     
     # STATE
@@ -91,12 +126,12 @@ def run_training_background(trainer: pl.Trainer, solver, dataloader):
     except Exception as e:
         print(f"Training failed: {e}")
 
-@api_bp.route('/train', methods=['POST'])
+@api_bp.rotue('/train', methods=['POST'])
 def train():
     if State().solver is None or State().dataloader is None:
         return jsonify({"error": "Solver or Dataloader not defined"}), 400
 
-
+    #### GET THE NEXT RUN INDEX from the runs directory
     State().directory_manager.run_idx_path = str(len(os.listdir(State().directory_manager.runs_path)) + 1)
     os.makedirs(State().directory_manager.checkpoint_path, exist_ok=True)
 
@@ -116,7 +151,7 @@ def train():
         plot_every_n_epochs=10
     )
 
-
+    ## DEPRECAED LOGGER
     #logger = TensorBoardLogger(
     #    save_dir=State().directory_manager.runs_path,
     #    name=State().directory_manager.log_name

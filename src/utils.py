@@ -2,6 +2,9 @@ import os
 import torch
 from pina import LabelTensor # Ensure LabelTensor is imported if checking isinstance
 
+from dataclasses import fields, is_dataclass
+import typing
+
 from src.state_management.state import State
 
 def unscale_T(T_scaled):
@@ -96,3 +99,42 @@ def read_files_to_map(directory):
         with open(filepath, 'r') as f:
             files_map[filename] = f.read() # Read content as string
     return files_map
+
+
+def get_field_type(ty):
+    """Determines the input type based on the Python type hint."""
+    # Handle Optional[T]
+    if typing.get_origin(ty) is typing.Union and type(None) in typing.get_args(ty):
+         ty = typing.get_args(ty)[0]
+
+    if is_dataclass(ty):
+        return 'group'
+    
+    # Handle Lists and Dicts -> JSON Editor
+    origin = typing.get_origin(ty)
+    if origin in (list, dict, typing.List, typing.Dict):
+        return 'json'
+        
+    if ty is int: return 'integer'
+    if ty is float: return 'number'
+    if ty is bool: return 'boolean'
+    return 'text'
+
+def generate_schema(cls):
+    """Recursively builds a dictionary describing the dataclass structure."""
+    schema = {}
+    for f in fields(cls):
+        field_type = get_field_type(f.type)
+        
+        item = {
+            'label': f.metadata.get('label', f.name.replace('_', ' ').title()),
+            'type': f.metadata.get('type', field_type), # Allow metadata to override
+            'unit': f.metadata.get('unit', ''),
+        }
+        
+        if field_type == 'group':
+            # Recursively generate schema for nested dataclass
+            item['sub_schema'] = generate_schema(f.type)
+            
+        schema[f.name] = item
+    return schema

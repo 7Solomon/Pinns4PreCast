@@ -8,8 +8,10 @@ from src.state_management.material import ConcreteData
 from src.state_management.domain import DomainVariables
 
 class State:
+    """
+        THIS is the Singleton class to manage global state incldiung CONFIGS, MATERIAL properties, and DOMAIn variables.
+    """
     _instance = None
-    _STATE_FILE = '.current_state.json'
     
     def __new__(cls):
         if cls._instance is None:
@@ -41,9 +43,9 @@ class State:
 
     def _auto_load_state(self):
         """Automatically load state from persisted file or defaults"""
-        if os.path.exists(self._STATE_FILE):
+        if os.path.exists(self.directory_manager.states_file):
             try:
-                with open(self._STATE_FILE, 'r') as f:
+                with open(self.directory_manager.states_file, 'r') as f:
                     state_info = json.load(f)
                     config_file = state_info.get('config')
                     material_file = state_info.get('material')
@@ -75,7 +77,7 @@ class State:
             'domain': domain_file
         }
         try:
-            with open(self._STATE_FILE, 'w') as f:
+            with open(self.directory_manager.states_file, 'w') as f:
                 json.dump(state_info, f, indent=2)
         except Exception as e:
             print(f"Could not persist state: {e}")
@@ -135,9 +137,9 @@ class State:
     
     def get_current_state_info(self):
         """Get information about currently loaded state"""
-        if os.path.exists(self._STATE_FILE):
+        if os.path.exists(self.directory_manager.states_file):
             try:
-                with open(self._STATE_FILE, 'r') as f:
+                with open(self.directory_manager.states_file, 'r') as f:
                     return json.load(f)
             except:
                 pass
@@ -157,6 +159,7 @@ class DirectoryManager:
     content_path: str = os.path.join('content')
     runs_path: str = os.path.join('content', 'runs')
 
+    states_file = '.current_state.json'
     run_idx_path: str = None
     
     @property

@@ -2,6 +2,10 @@ import os
 from flask import Blueprint, render_template, request, redirect, url_for
 
 from src.state_management.state import State
+from src.state_management.config import Config
+from src.state_management.domain import DomainVariables
+from src.state_management.material import ConcreteData
+from src.utils import generate_schema
 
 routes_bp = Blueprint('routes', __name__)
 
@@ -40,6 +44,8 @@ def setup():
     options_data = State().get_all_options_data()
     current_state = State().get_current_state_info()
     return render_template('setup.html', 
-                         options_data=options_data, 
-                         current_state=current_state,
-                         active_page='setup')
+                           current_state=current_state,
+                           options_data=options_data,
+                           config_schema=generate_schema(Config),
+                           material_schema=generate_schema(ConcreteData),
+                           domain_schema=generate_schema(DomainVariables))

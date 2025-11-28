@@ -18,6 +18,7 @@ class DatasetConfig:
     batch_size: int = field(default=32, metadata={"label": "Batch Size", "type": "integer"})
     num_samples: int = field(default=10000, metadata={"label": "Total Samples", "type": "integer"})  # Total training samples in the dataset
 
+    num_workers: int = field(default=91, metadata={"label": "DataLoader Workers", "type": "integer"})
 
 @dataclass
 class ModelConfig:
@@ -34,6 +35,12 @@ class ModelConfig:
     trunk_config: Dict[str, Any] = field(default_factory=lambda: {
         'input_size': 4, 'hidden_layers': [256, 256, 256] # x,y,z,t 
     }, metadata={"label": "Trunk Config", "type": "dict"})
+
+    fourier_features: Dict[str, Any] = field(default_factory=lambda: {
+        'input_dim': 4,       # x, y, z, t
+        'mapping_size': 64,   # 128 features (sin + cos)
+        'scale': 5.0          # frequency RANGE
+    }, metadata={"label": "Fourier Features Config", "type": "dict"})
 
     activation_types: Dict[str, str] = field(default_factory=lambda: {
         'branch': 'Tanh',
@@ -53,6 +60,7 @@ class ModelConfig:
 class TrainingConfig:
     max_epochs: int = field(default=100, metadata={"label": "Max Epochs", "type": "integer"})
     loss_weights: Dict[str, float] = field(default_factory=lambda: {'physics': 100.0, 'bc': 1.0, 'ic': 10.0}, metadata={"label": "Loss Weights", "type": "dict"})
+    time_weighted_loss: Dict[str, Any] = field(default_factory=lambda: {'time_decay_rate': 5.0}, metadata={"label": "Time Weighted Loss", "type": "boolean"})
     
     optimizer_type: str = field(default='Adam', metadata={"label": "Optimizer", "type": "text"})
     optimizer_learning_rate: float = field(default=1e-4, metadata={"label": "Learning Rate", "type": "number"})
