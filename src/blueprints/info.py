@@ -15,7 +15,7 @@ from src.state_management.material import ConcreteData
 info_bp = Blueprint('info', __name__, url_prefix='/info')
 
 
-@info_bp.route('/runs', methods=['GET'])
+@info_bp.route('/runs/data', methods=['GET'])
 def get_all_runs():
     """Scans the runs folder and returns a list of all runs with basic status"""
     runs_path = State().directory_manager.runs_path

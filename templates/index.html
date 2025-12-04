@@ -1,0 +1,12 @@
+<script>
+    function killServer() {
+        if (!confirm("This will kill the Flask server completely. You will need to restart it manually in the terminal.")) return;
+
+        fetch('/utils/shutdown', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                document.body.innerHTML = `<div style="padding:50px; text-align:center;"><h1>Server Shut Down</h1><p>${data.message}</p></div>`;
+            })
+            .catch(err => console.log(err));
+    }
+</script>

@@ -3,448 +3,99 @@
 {% block title %}Training Runs{% endblock %}
 
 {% block content %}
-<!-- Plotly is required for the charts -->
+<!-- Scripts -->
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="{{ url_for('static', filename='js/runs_charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/runs_manager.js') }}"></script>
 
-<style>
-    /* --- Accordion & Card Styles --- */
-    .run-card {
-        margin-bottom: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-    }
-
-    .run-header {
-        padding: 15px;
-        background: #f8f9fa;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .run-header:hover {
-        background: #e9ecef;
-    }
-
-    .run-body {
-        padding: 20px;
-        display: none;
-        /* Hidden by default */
-        border-top: 1px solid #ddd;
-    }
-
-    .run-body.active {
-        display: block;
-        /* Shown when active */
-    }
-
-    /* --- Status Indicators --- */
-    .status-dot {
-        height: 10px;
-        width: 10px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 5px;
-    }
-
-    .status-running {
-        background-color: #28a745;
-        box-shadow: 0 0 5px #28a745;
-    }
-
-    .status-finished {
-        background-color: #6c757d;
-    }
-</style>
-
-<div class="content-header mb-4">
-    <h1>Training History</h1>
-    <button class="btn btn-primary" onclick="startNewRun()">+ Start New Training Run</button>
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold text-dark mb-0">Training History</h2>
+        <p class="text-muted mb-0">Manage and visualize your training runs</p>
+    </div>
+    <div class="btn-group shadow-sm">
+        <button class="btn btn-primary" onclick="RunManager.startNewRun()">
+            <i class="bi bi-play-fill"></i> Start New Run
+        </button>
+        <button class="btn btn-outline-danger" onclick="RunManager.stopRun()">
+            <i class="bi bi-stop-fill"></i> Stop Current
+        </button>
+    </div>
 </div>
 
-<div id="runs-container">
-    <div class="text-center p-5">Loading runs...</div>
+<!-- Container for Runs -->
+<div id="runs-container" class="d-flex flex-column gap-3">
+    <div class="text-center py-5 text-muted">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <p>Loading run history...</p>
+    </div>
 </div>
 
-<script>
-    let activeInterval = null;
-    let activeRunId = null;
-    // Cache for sensor data to allow instant switching between epochs/types
-    let currentVisData = { temperature: {}, alpha: {} };
+<!-- TEMPLATE: Single Run Card -->
+<template id="run-card-template">
+    <div class="card shadow-sm border-0 run-card">
+        <!-- Card Header (Clickable) -->
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center run-header"
+            style="cursor: pointer;">
+            <div class="d-flex align-items-center">
+                <!-- Status Dot -->
+                <span class="status-dot"></span>
+                <!-- Title -->
+                <h5 class="mb-0 fw-bold text-dark run-title me-3">Run #</h5>
+            </div>
 
-    document.addEventListener('DOMContentLoaded', loadRunsList);
+            <!-- Badge -->
+            <span class="badge rounded-pill run-status"></span>
+        </div>
 
-    function loadRunsList() {
-        fetch('/info/runs')
-            .then(r => r.json())
-            .then(runs => {
-                const container = document.getElementById('runs-container');
-                container.innerHTML = '';
+        <!-- Card Body (Hidden by default via JS) -->
+        <div class="card-body run-body" style="display: none; background-color: #fcfcfc;">
 
-                runs.forEach(run => {
-                    const statusColor = run.status === 'running' ? 'status-running' : 'status-finished';
+            <!-- Toolbar inside the card -->
+            <div class="d-flex justify-content-end mb-3 pb-2 border-bottom">
+                <button class="btn btn-sm btn-outline-secondary btn-refresh">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh Data
+                </button>
+            </div>
 
-                    const html = `
-                    <div class="run-card" id="card-${run.id}">
-                        <div class="run-header" onclick="toggleRun('${run.id}')">
-                            <div>
-                                <span class="status-dot ${statusColor}"></span>
-                                <strong>Run #${run.id}</strong>
+            <div class="row g-4">
+                <!-- Left: Loss Chart -->
+                <div class="col-lg-6">
+                    <h6 class="text-uppercase text-muted fw-bold small mb-3">Loss Metrics</h6>
+                    <div class="chart-loss bg-white border rounded shadow-sm" style="height: 350px;"></div>
+                </div>
+
+                <!-- Right: Sensor Chart -->
+                <div class="col-lg-6">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-uppercase text-muted fw-bold small mb-0">Sensor Evolution</h6>
+
+                        <!-- Controls -->
+                        <div class="d-flex gap-2">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <input type="radio" class="btn-check vis-type-temp" autocomplete="off" checked>
+                                <label class="btn btn-outline-primary vis-label-temp">Temp</label>
+
+                                <input type="radio" class="btn-check vis-type-alpha" autocomplete="off">
+                                <label class="btn btn-outline-primary vis-label-alpha">Alpha</label>
                             </div>
-                            <span class="badge bg-light text-dark">${run.status}</span>
-                        </div>
-                        <div class="run-body" id="body-${run.id}">
-                            <div class="d-flex justify-content-end mb-2 border-bottom pb-2">
-                                <button id="btn-refresh-${run.id}" class="btn btn-sm btn-outline-secondary" onclick="refreshRun('${run.id}')">
-                                    &#x21bb; Refresh Data
-                                </button>
-                            </div>  
-                            <div class="row">
-                                <!-- LEFT COL: Loss Metrics -->
-                                <div class="col-md-6">
-                                    <h5>Loss Metrics</h5>
-                                    <div id="chart-${run.id}" style="height: 400px;"></div>
-                                </div>
 
-                                <!-- RIGHT COL: Sensor Evolution (New) -->
-                                <div class="col-md-6">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5 class="m-0">Sensor Evolution</h5>
-                                        
-                                        <!-- Vis Controls -->
-                                        <div class="d-flex gap-2">
-                                            <div class="btn-group btn-group-sm" role="group">
-                                                <input type="radio" class="btn-check" name="visType-${run.id}" id="type-temp-${run.id}" autocomplete="off" checked onchange="updateVisUI('${run.id}')">
-                                                <label class="btn btn-outline-primary" for="type-temp-${run.id}">Temp</label>
-
-                                                <input type="radio" class="btn-check" name="visType-${run.id}" id="type-alpha-${run.id}" autocomplete="off" onchange="updateVisUI('${run.id}')">
-                                                <label class="btn btn-outline-primary" for="type-alpha-${run.id}">Alpha</label>
-                                            </div>
-
-                                            <select id="epoch-selector-${run.id}" class="form-select form-select-sm" style="width: auto;" onchange="renderSensorChart('${run.id}')">
-                                                <option value="">Loading...</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Vis Container -->
-                                    <div id="vis-container-${run.id}" style="height: 400px; border: 1px solid #eee; position: relative;">
-                                        <div class="d-flex justify-content-center align-items-center h-100 text-muted">
-                                            Select a run to load data
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <select class="form-select form-select-sm epoch-selector" style="width: 120px;">
+                                <option value="">Loading...</option>
+                            </select>
                         </div>
                     </div>
-                    `;
-                    container.insertAdjacentHTML('beforeend', html);
-                });
-            });
-    }
 
-    function refreshRun(runId) {
-        const btn = document.getElementById(`btn-refresh-${runId}`);
-        const originalText = btn.innerHTML;
-
-        // visual feedback
-        btn.disabled = true;
-        btn.innerHTML = "Loading...";
-
-        // Call both update functions and wait for them to finish
-        Promise.all([
-            fetchAndPlotLoss(runId),
-            loadSensorVis(runId)
-        ]).then(() => {
-            // Success feedback can HERE
-        }).catch(err => {
-            console.error("Refresh failed", err);
-        }).finally(() => {
-            // Reset button
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        });
-    }
-
-    function toggleRun(runId) {
-        const body = document.getElementById(`body-${runId}`);
-        const isOpening = !body.classList.contains('active');
-
-        // Close others
-        document.querySelectorAll('.run-body').forEach(el => el.classList.remove('active'));
-        clearInterval(activeInterval);
-
-        if (isOpening) {
-            body.classList.add('active');
-            activeRunId = runId;
-
-            // Load Data
-            fetchAndPlotLoss(runId);
-            loadSensorVis(runId);
-
-            // Poll if running
-            // activeInterval = setInterval(() => fetchAndPlotLoss(runId), 2000);
-        }
-    }
-
-    function fetchAndPlotLoss(runId) {
-        fetch(`/info/run/${runId}/log`)
-            .then(r => r.json())
-            .then(data => {
-                // ... (keep existing checks) ...
-
-                const getTraceData = (key) => {
-                    return {
-                        x: data.history.map(h => h[key] !== null ? h.step : null),
-                        y: data.history.map(h => h[key])
-                    };
-                };
-
-                const traces = [];
-
-                // --- GROUP 1: MAIN LOSSES (Thick Lines) ---
-                const tLoss = getTraceData('loss');
-                traces.push({
-                    x: tLoss.x, y: tLoss.y,
-                    name: 'Total Loss', mode: 'lines',
-                    line: { color: 'black', width: 3 },
-                    legendgroup: 'total'
-                });
-
-                // --- GROUP 2: PHYSICS BREAKDOWN (Blues) ---
-                const pLoss = getTraceData('loss_physics');
-                traces.push({
-                    x: pLoss.x, y: pLoss.y,
-                    name: 'Phys Total', mode: 'lines',
-                    line: { color: '#1f77b4', width: 2 },
-                    legendgroup: 'physics'
-                });
-
-                const pLossTemp = getTraceData('loss_phys_temperature');
-                traces.push({
-                    x: pLossTemp.x, y: pLossTemp.y,
-                    name: 'Phys (Temp)', mode: 'lines',
-                    line: { color: '#aec7e8', dash: 'dot' }, // Light Blue Dotted
-                    legendgroup: 'physics'
-                });
-
-                const pLossAlpha = getTraceData('loss_phys_alpha');
-                traces.push({
-                    x: pLossAlpha.x, y: pLossAlpha.y,
-                    name: 'Phys (Alpha)', mode: 'lines',
-                    line: { color: '#1f77b4', dash: 'dot' }, // Dark Blue Dotted
-                    legendgroup: 'physics'
-                });
-
-                // --- GROUP 3: BC BREAKDOWN (Oranges) ---
-                const bLoss = getTraceData('loss_bc');
-                traces.push({
-                    x: bLoss.x, y: bLoss.y,
-                    name: 'BC Total', mode: 'lines',
-                    line: { color: '#ff7f0e', width: 2 },
-                    legendgroup: 'bc'
-                });
-
-                // BC Temp (Only one BC usually, so maybe redundant, but good for completeness)
-                const bLossTemp = getTraceData('loss_bc_temperature');
-                if (bLossTemp.y.some(v => v != null)) {
-                    traces.push({
-                        x: bLossTemp.x, y: bLossTemp.y,
-                        name: 'BC (Temp)', mode: 'lines',
-                        line: { color: '#ffbb78', dash: 'dot' },
-                        legendgroup: 'bc'
-                    });
-                }
-
-                // --- GROUP 4: IC BREAKDOWN (Greens) ---
-                const iLoss = getTraceData('loss_ic');
-                traces.push({
-                    x: iLoss.x, y: iLoss.y,
-                    name: 'IC Total', mode: 'lines',
-                    line: { color: '#2ca02c', width: 2 },
-                    legendgroup: 'ic'
-                });
-
-                const iLossTemp = getTraceData('loss_ic_temperature');
-                traces.push({
-                    x: iLossTemp.x, y: iLossTemp.y,
-                    name: 'IC (Temp)', mode: 'lines',
-                    line: { color: '#98df8a', dash: 'dot' }, // Light Green Dotted
-                    legendgroup: 'ic'
-                });
-
-                const iLossAlpha = getTraceData('loss_ic_alpha');
-                traces.push({
-                    x: iLossAlpha.x, y: iLossAlpha.y,
-                    name: 'IC (Alpha)', mode: 'lines',
-                    line: { color: '#98df8a', dash: 'dot' },
-                    legendgroup: 'ic'
-                });
-
-
-                // --- VALIDATION LOSSES (Markers/Dots) ---
-                // These only appear every N epochs, so we use connectgaps: false implicitly
-
-                // 5. Val Total
-                const valTotal = getTraceData('val_loss');
-                // Filter out nulls entirely for markers so they don't take up space
-                if (valTotal.y.some(y => y !== null)) {
-                    traces.push({
-                        x: valTotal.x.filter(x => x !== null),
-                        y: valTotal.y.filter(y => y !== null),
-                        name: 'Val Total', mode: 'markers',
-                        marker: { symbol: 'diamond', color: 'red', size: 8 }
-                    });
-                }
-
-                const layout = {
-                    margin: { t: 30, l: 60, r: 20, b: 40 },
-                    showlegend: true,
-                    // Group legend items to save vertical space
-                    legend: { orientation: 'h', y: 1.1, tracegroupgap: 5 },
-                    yaxis: {
-                        type: 'log',
-                        title: 'Loss (Log Scale)',
-                        autorange: true
-                    },
-                    xaxis: { title: 'Steps' },
-                    dragmode: 'pan'
-                };
-
-                const config = {
-                    responsive: true,
-                    scrollZoom: true, // ENABLE SCROLL ZOOM
-                    displayModeBar: true,
-                };
-
-                Plotly.react(`chart-${runId}`, traces, layout, config);
-            });
-    }
-
-    function loadSensorVis(runId) {
-        const container = document.getElementById(`vis-container-${runId}`);
-        container.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary"></div></div>';
-
-        fetch(`/info/run/${runId}/vis/sensor`)
-            .then(r => r.json())
-            .then(data => {
-                currentVisData = data; // Cache globally (or per run scope)
-
-                const tempKeys = Object.keys(data.temperature);
-
-                // Handle No Data Case
-                if (tempKeys.length === 0) {
-                    container.innerHTML = `
-                        <div class="d-flex flex-column justify-content-center align-items-center h-100 text-muted">
-                            <p>No visualization data found.</p>
-                        </div>`;
-                    return;
-                }
-
-                // Update Dropdown
-                const sel = document.getElementById(`epoch-selector-${runId}`);
-                sel.innerHTML = '';
-                tempKeys.forEach(fname => {
-                    const opt = document.createElement('option');
-                    opt.value = fname;
-                    opt.text = fname.replace('.csv', '').replace('_', ' ');
-                    sel.appendChild(opt);
-                });
-                // Select last epoch by default
-                sel.value = tempKeys[tempKeys.length - 1];
-
-                // Render
-                renderSensorChart(runId);
-            })
-            .catch(err => {
-                container.innerHTML = `<div class="alert alert-danger m-3">Error: ${err}</div>`;
-            });
-    }
-
-    function updateVisUI(runId) {
-        renderSensorChart(runId);
-    }
-
-    function renderSensorChart(runId) {
-        const isTemp = document.getElementById(`type-temp-${runId}`).checked;
-        const dataset = isTemp ? currentVisData.temperature : currentVisData.alpha;
-        const selectedEpoch = document.getElementById(`epoch-selector-${runId}`).value;
-
-        if (!selectedEpoch || !dataset[selectedEpoch]) return;
-
-        // Parse CSV Data
-        const parsed = parseCSV(dataset[selectedEpoch]);
-
-        // Build Traces
-        // Format: Time_s, Time_h, T1, T2 ...
-        const traces = [];
-        // Loop through columns starting at index 2 (T1)
-        for (let i = 2; i < parsed.headers.length; i++) {
-            traces.push({
-                x: parsed.columns[1], // Index 1 is Time_h
-                y: parsed.columns[i], // Sensor Value
-                mode: 'lines',
-                name: parsed.headers[i] // e.g., "T1_Temp"
-            });
-        }
-
-        const layout = {
-            margin: { t: 30, l: 50, r: 20, b: 40 },
-            xaxis: { title: 'Time (hours)' },
-            yaxis: { title: isTemp ? 'Temperature (°C)' : 'Degree of Hydration' },
-            showlegend: true,
-            legend: { orientation: 'h', y: -0.2 }, // Horizontal legend at bottom
-
-            dragmode: 'pan'
-        };
-
-        const config = {
-            responsive: true,
-            scrollZoom: true, // ENABLE SCROLL ZOOM
-            displayModeBar: true,
-        };
-
-        Plotly.newPlot(`vis-container-${runId}`, traces, layout, config);
-    }
-
-    function parseCSV(csvText) {
-        const lines = csvText.trim().split('\n');
-        const headers = lines[0].split(',');
-        const columns = headers.map(() => []);
-
-        for (let i = 1; i < lines.length; i++) {
-            const row = lines[i].split(',');
-            if (row.length === headers.length) {
-                row.forEach((val, colIndex) => {
-                    columns[colIndex].push(parseFloat(val));
-                });
-            }
-        }
-        return { headers, columns };
-    }
-
-    function startNewRun() {
-        const btn = document.querySelector('.btn-primary');
-        btn.innerText = "Initializing...";
-        btn.disabled = true;
-
-        fetch('/api/define_model', { method: 'POST' })
-            .then(() => fetch('/api/define_training_pipeline', { method: 'POST' }))
-            .then(() => fetch('/api/train', { method: 'POST' }))
-            .then(r => r.json())
-            .then(data => {
-                loadRunsList();
-                setTimeout(() => {
-                    // Simple reload to ensure fresh state
-                    location.reload();
-                }, 1000);
-            })
-            .catch(err => alert("Error: " + err))
-            .finally(() => {
-                btn.innerText = "+ Start New Training Run";
-                btn.disabled = false;
-            });
-    }
-</script>
+                    <div class="vis-container bg-white border rounded shadow-sm position-relative"
+                        style="height: 350px;">
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted small">
+                            Select a run to load data
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
 {% endblock %}

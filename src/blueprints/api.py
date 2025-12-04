@@ -26,11 +26,11 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 CONSOLE_OUTPUT = False 
 
 
-@api_bp.route('/define_model', methods=['POST'])
-def define_model_basic():
-    return redirect(url_for('api.define_model_flexnet'))
+#@api_bp.route('/define_model', methods=['POST'])
+#def define_model_basic():
+#    return redirect(url_for('api.define_model_flexnet'))
 
-@api_bp.route('/define_model_flexnet', methods=['POST'])
+@api_bp.route('/define_model', methods=['POST'])
 def define_flex_model():
     """
     Define the FlexDeepONet model and problem instance using data from the request.
@@ -126,7 +126,7 @@ def run_training_background(trainer: pl.Trainer, solver, dataloader):
     except Exception as e:
         print(f"Training failed: {e}")
 
-@api_bp.rotue('/train', methods=['POST'])
+@api_bp.route('/train', methods=['POST'])
 def train():
     if State().solver is None or State().dataloader is None:
         return jsonify({"error": "Solver or Dataloader not defined"}), 400
@@ -174,7 +174,8 @@ def train():
 
     thread = threading.Thread(
         target=run_training_background, 
-        args=(trainer, State().solver, State().dataloader)
+        args=(trainer, State().solver, State().dataloader),
+        daemon=True
     )
     thread.start()
     
@@ -186,3 +187,17 @@ def train():
     })
 
 
+@api_bp.route('/stop_training', methods=['POST'])
+def stop_training():
+    """Gracefully stops the PyTorch Lightning training."""
+    try:
+        trainer = getattr(State(), 'trainer', None)
+        
+        if trainer:
+            trainer.should_stop = True
+            return jsonify({"message": "Signal sent to stop training. It will finish the current batch."})
+        else:
+            return jsonify({"error": "No active trainer found in State."}), 400
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

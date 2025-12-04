@@ -2,33 +2,94 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}DeepONet PINN Dashboard{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-    {% block extra_styles %}{% endblock %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %}</title>
+    <!-- Bootstrap 5 CSS (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Optional: Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    <style>
+        /* Minimal Custom CSS just for the sidebar layout */
+        body {
+            min-height: 100vh;
+            background-color: #f8f9fa;
+        }
+
+        .sidebar {
+            width: 250px;
+            min-height: 100vh;
+            background: #2c3e50;
+            color: white;
+            position: fixed;
+        }
+
+        .sidebar a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            padding: 15px 20px;
+            display: block;
+        }
+
+        .sidebar a:hover,
+        .sidebar a.active {
+            background: #34495e;
+            color: white;
+            border-left: 4px solid #3498db;
+        }
+
+        .main-content {
+            margin-left: 250px;
+            padding: 30px;
+        }
+
+        /* Status Dots */
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .bg-running {
+            background-color: #28a745;
+            box-shadow: 0 0 5px #28a745;
+        }
+
+        .bg-finished {
+            background-color: #6c757d;
+        }
+    </style>
 </head>
 
 <body>
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <h2>DeepONet PINN</h2>
+
+    <div class="sidebar d-flex flex-column">
+        <div class="p-3 border-bottom border-secondary mb-2">
+            <h4 class="text-primary fw-bold">DeepONet</h4>
         </div>
-        <ul class="sidebar-menu">
-            <li><a href="{{ url_for('routes.setup') }}" class="{% if active_page == 'setup' %}active{% endif %}">
-                    ⚙️ Setup
-                </a></li>
-            <li><a href="{{ url_for('routes.runs') }}" class="{% if active_page == 'runs' %}active{% endif %}">
-                    📊 Runs
-                </a></li>
-        </ul>
-    </aside>
+        <nav class="flex-grow-1">
+            <a href="{{ url_for('routes.runs') }}" class="{{ 'active' if request.endpoint == 'routes.runs' else '' }}">
+                <i class="bi bi-graph-up"></i> Training Runs
+            </a>
 
-    <main class="main-content">
+            <a href="{{ url_for('routes.setup') }}"
+                class="{{ 'active' if request.endpoint == 'routes.setup' else '' }}">
+                <i class="bi bi-gear"></i> Setup
+            </a>
+        </nav>
+
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
         {% block content %}{% endblock %}
-    </main>
+    </div>
 
-    {% block scripts %}{% endblock %}
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>
