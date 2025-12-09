@@ -35,11 +35,38 @@ class State:
         self.solver = None
         self.dataset = None
         self.dataloader = None
+        self.trainer = None 
 
         self._initialized = True
         
-        # Auto-load state on initialization
         self._auto_load_state()
+        self._cleanup_stale_runs
+
+    def _cleanup_stale_runs(self):
+        """
+        Scans all runs on startup. If any run says 'running', it implies the server 
+        crashed or was killed previously. We mark them as 'aborted'.
+        """
+        runs_path = self.directory_manager.runs_path
+        if not os.path.exists(runs_path):
+            return
+
+        for dirname in os.listdir(runs_path):
+            status_path = os.path.join(runs_path, dirname, 'status.json')
+            if os.path.exists(status_path):
+                try:
+                    with open(status_path, 'r') as f:
+                        data = json.load(f)
+                    
+                    # If file says running, but we just started the server -> IT IS A LIE.
+                    if data.get('status') == 'running':
+                        data['status'] = 'aborted'
+                        data['message'] = 'Server restarted while training'
+                        
+                        with open(status_path, 'w') as f:
+                            json.dump(data, f, indent=4)
+                except Exception as e:
+                    print(f"Error cleaning up run {dirname}: {e}")
 
     def _auto_load_state(self):
         """Automatically load state from persisted file or defaults"""
@@ -59,18 +86,29 @@ class State:
         self._load_defaults()
     
     def _load_defaults(self):
-        """Load default.json files for all state components"""
         try:
-            default_config = 'default.json'
-            default_material = 'default.json'
-            default_domain = 'default.json'
-            
-            self.load_state(default_config, default_material, default_domain)
+            self.load_state('default.json', 'default.json', 'default.json')
         except Exception as e:
             print(f"Could not load default state: {e}")
     
-    def _persist_state(self, config_file: str, material_file: str, domain_file: str):
-        """Save current state selection to file"""
+    def load_state(self, config_file: str, material_file: str, domain_file: str):
+        config_path = os.path.join(self.directory_manager.configs_path, config_file)
+        material_path = os.path.join(self.directory_manager.materials_path, material_file)
+        domain_path = os.path.join(self.directory_manager.domains_path, domain_file)
+        
+        self.directory_manager.set_directories({
+            'config': config_path,
+            'material': material_path,
+            'domain': domain_path
+        })
+
+        self.config = Config.load(config_path)
+        self.material = ConcreteData.load(material_path)
+        self.domain = DomainVariables.load(domain_path)
+        
+        self._persist_state(config_file, material_file, domain_file)
+    
+    def _persist_state(self, config_file, material_file, domain_file):
         state_info = {
             'config': config_file,
             'material': material_file,
@@ -79,6 +117,8 @@ class State:
         try:
             with open(self.directory_manager.states_file, 'w') as f:
                 json.dump(state_info, f, indent=2)
+        except Exception as e:
+            print(f"Could not persist state: {e}")
         except Exception as e:
             print(f"Could not persist state: {e}")
 

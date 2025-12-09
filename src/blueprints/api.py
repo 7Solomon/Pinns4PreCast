@@ -171,6 +171,7 @@ def train():
         enable_progress_bar=CONSOLE_OUTPUT,
         enable_model_summary=CONSOLE_OUTPUT
     )
+    State().trainer = trainer
 
     thread = threading.Thread(
         target=run_training_background, 
@@ -191,8 +192,9 @@ def train():
 def stop_training():
     """Gracefully stops the PyTorch Lightning training."""
     try:
+        print(State().trainer)
         trainer = getattr(State(), 'trainer', None)
-        
+        print(trainer)
         if trainer:
             trainer.should_stop = True
             return jsonify({"message": "Signal sent to stop training. It will finish the current batch."})
