@@ -40,7 +40,7 @@ class State:
         self._initialized = True
         
         self._auto_load_state()
-        self._cleanup_stale_runs
+        self._cleanup_stale_runs()
 
     def _cleanup_stale_runs(self):
         """
@@ -57,8 +57,6 @@ class State:
                 try:
                     with open(status_path, 'r') as f:
                         data = json.load(f)
-                    
-                    # If file says running, but we just started the server -> IT IS A LIE.
                     if data.get('status') == 'running':
                         data['status'] = 'aborted'
                         data['message'] = 'Server restarted while training'
