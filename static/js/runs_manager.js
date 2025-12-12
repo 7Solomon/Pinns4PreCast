@@ -20,34 +20,88 @@ const RunManager = {
                 }
 
                 runs.forEach(run => {
+                    console.log("Run Data:", run)
                     const clone = template.content.cloneNode(true);
 
                     // 1. Set ID
                     const card = clone.querySelector('.run-card');
                     card.setAttribute('data-id', run.id);
 
-                    // 2. Status & Title
-                    const dot = clone.querySelector('.status-dot');
+                    const titleEl = clone.querySelector('.run-title');
+                    const dateEl = clone.querySelector('.run-date');
                     const badge = clone.querySelector('.run-status');
+                    const dot = clone.querySelector('.status-dot');
 
-                    clone.querySelector('.run-title').textContent = `Run #${run.id}`;
-                    badge.textContent = run.status.toUpperCase();
+                    if (run.start_time && run.start_time !== "Unknown") {
+                        const dateObj = new Date(run.start_time);
 
-                    if (run.status === 'running') {
-                        dot.classList.add('bg-running');
-                        badge.classList.add('bg-success'); // Bootstrap green badge
+                        // Main Title: "Fri, Dec 12"
+                        titleEl.textContent = dateObj.toLocaleDateString(undefined, {
+                            weekday: 'short', month: 'short', day: 'numeric'
+                        });
+
+                        // Subtitle: "14:30 · Ep 5 · L 0.0452"
+                        let infoText = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                        if (run.epoch !== undefined && run.epoch !== null) {
+                            infoText += ` · Ep ${run.epoch}`;
+                        }
+
+                        if (run.loss !== undefined && run.loss !== null) {
+                            const lossVal = typeof run.loss === 'number' ? run.loss.toFixed(4) : run.loss;
+                            infoText += ` · L ${lossVal}`;
+                        }
+
+                        if (dateEl) dateEl.textContent = infoText;
+
                     } else {
-                        dot.classList.add('bg-finished');
-                        badge.classList.add('bg-secondary'); // Bootstrap grey badge
+                        // Fallback for Legacy Runs
+                        titleEl.textContent = `Run #${run.id}`;
+                        if (dateEl) dateEl.textContent = "Legacy Run";
                     }
 
-                    // 3. Event Listeners
+                    // 3. Set Status Colors
+                    // Reset classes first (safest approach)
+                    badge.className = 'badge rounded-pill run-status';
+                    dot.className = 'status-dot';
 
-                    // Toggle Accordion
+                    const status = run.status.toLowerCase();
+                    badge.textContent = status.toUpperCase();
+
+                    switch (status) {
+                        case 'running':
+                            badge.classList.add('bg-primary'); // Blue
+                            dot.classList.add('bg-running');   // Pulsing Blue
+                            break;
+
+                        case 'finished':
+                        case 'success':
+                            badge.classList.add('bg-success'); // Green
+                            dot.classList.add('bg-finished');
+                            break;
+
+                        case 'aborted':
+                        case 'killed':
+                        case 'stopped':
+                            badge.classList.add('bg-danger'); // Red
+                            dot.classList.add('bg-aborted');
+                            break;
+
+                        case 'failed':
+                        case 'error':
+                            badge.classList.add('bg-warning', 'text-dark'); // Orange
+                            dot.classList.add('bg-error');
+                            break;
+
+                        default:
+                            badge.classList.add('bg-secondary'); // Grey
+                            dot.classList.add('bg-secondary');
+                    }
+
+                    // 4. Event Listeners
                     const header = clone.querySelector('.run-header');
                     header.addEventListener('click', () => this.toggleRun(run.id));
 
-                    // Refresh Button
                     const refreshBtn = clone.querySelector('.btn-refresh');
                     refreshBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -59,6 +113,7 @@ const RunManager = {
                     const radioAlpha = clone.querySelector('.vis-type-alpha');
                     const labelTemp = clone.querySelector('.vis-label-temp');
                     const labelAlpha = clone.querySelector('.vis-label-alpha');
+                    const epochSel = clone.querySelector('.epoch-selector');
 
                     const tempId = `temp-${run.id}`;
                     const alphaId = `alpha-${run.id}`;
@@ -70,7 +125,7 @@ const RunManager = {
                     // Chart Triggers
                     radioTemp.addEventListener('change', () => RunCharts.renderSensorChart(run.id));
                     radioAlpha.addEventListener('change', () => RunCharts.renderSensorChart(run.id));
-                    clone.querySelector('.epoch-selector').addEventListener('change', () => RunCharts.renderSensorChart(run.id));
+                    epochSel.addEventListener('change', () => RunCharts.renderSensorChart(run.id));
 
                     container.appendChild(clone);
                 });
@@ -112,6 +167,8 @@ const RunManager = {
 
     startNewRun: function () {
         const btn = document.querySelector('.btn-primary');
+        if (!btn) return; // Safety check
+
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Initializing...';
 
@@ -132,6 +189,17 @@ const RunManager = {
         if (!confirm("Are you sure you want to stop the current training?")) return;
 
         fetch('/api/stop_training', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.message);
+                setTimeout(() => this.loadRunsList(), 1000);
+            })
+            .catch(err => alert("Error: " + err));
+    },
+
+    killRun: function () {
+        if (!confirm("Are you sure you want to Kill the current training?")) return;
+        fetch('/api/kill_training', { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 alert(data.message);

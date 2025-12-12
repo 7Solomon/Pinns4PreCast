@@ -69,10 +69,12 @@ class DashboardLogger(Logger):
         row = {k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))}
         row['step'] = step
         row['timestamp'] = time.time()
-        
+
+        current_epoch = metrics.get('epoch', None)        
+        current_loss = metrics.get('loss_step', metrics.get('loss_epoch', metrics.get('loss', None)))
+
         # Determine file mode
         file_exists = os.path.isfile(self.metrics_file)
-        
         with open(self.metrics_file, 'a', newline='') as f:
             writer = csv.DictWriter(
                 f, 
@@ -88,23 +90,37 @@ class DashboardLogger(Logger):
             writer.writerow(row)
 
         # Update status file for the frontend polling
-        self._update_status("running")
+        self._update_status("running", epoch=current_epoch, loss=current_loss)
 
     @rank_zero_only
     def finalize(self, status):
         self._update_status(status)
 
-    def _update_status(self, status):
-        """Atomic status update"""
-        data = {
-            "id": self.version,
-            "status": status,
-            "last_update": time.time()
-        }
+    def _update_status(self, status, epoch=None, loss=None):
+
+        data = {}
+        if os.path.exists(self.status_file):
+            try:
+                with open(self.status_file, 'r') as f:
+                    data = json.load(f)
+            except:
+                pass # If file is corrupt, we start fresh, which is GUUD
+
+        #Update fields
+        data['id'] = self.version
+        data['status'] = status
+        data['last_update'] = time.time()
+        
+        if epoch is not None:
+            data['epoch'] = int(epoch)
+        if loss is not None:
+            data['loss'] = float(loss)
+
+        # Atomic write
         temp = self.status_file + '.tmp'
         try:
             with open(temp, 'w') as f:
-                json.dump(data, f)
+                json.dump(data, f, indent=4)
             os.replace(temp, self.status_file)
         except Exception as e:
             print(f"Status update failed: {e}")

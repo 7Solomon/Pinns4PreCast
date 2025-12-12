@@ -14,14 +14,29 @@
         <h2 class="fw-bold text-dark mb-0">Training History</h2>
         <p class="text-muted mb-0">Manage and visualize your training runs</p>
     </div>
-    <div class="btn-group shadow-sm">
-        <button class="btn btn-primary" onclick="RunManager.startNewRun()">
-            <i class="bi bi-play-fill"></i> Start New Run
+    <div class="d-flex align-items-center gap-2 p-2 border rounded shadow-sm bg-light">
+        <!-- Start is emphasized -->
+        <button class="btn btn-primary d-flex align-items-center gap-2 px-3" onclick="RunManager.startNewRun()">
+            <i class="bi bi-play-circle-fill"></i>
+            <span>Start New Run</span>
         </button>
-        <button class="btn btn-outline-danger" onclick="RunManager.stopRun()">
-            <i class="bi bi-stop-fill"></i> Stop Current
-        </button>
+
+        <div class="vr mx-1"></div> <!-- Vertical Rule Separator -->
+
+        <!-- Stop actions grouped but visually distinct -->
+        <div class="btn-group" role="group">
+            <button class="btn btn-outline-secondary text-dark" onclick="RunManager.stopRun()" data-bs-toggle="tooltip"
+                title="Wait for batch to finish">
+                <i class="bi bi-stop-fill text-warning"></i> Stop
+            </button>
+            <button class="btn btn-outline-danger" onclick="RunManager.killRun()" data-bs-toggle="tooltip"
+                title="Force quit immediately">
+                <i class="bi bi-lightning-charge-fill"></i> Kill
+            </button>
+        </div>
     </div>
+
+
 </div>
 
 <!-- Container for Runs -->
@@ -41,8 +56,14 @@
             <div class="d-flex align-items-center">
                 <!-- Status Dot -->
                 <span class="status-dot"></span>
-                <!-- Title -->
-                <h5 class="mb-0 fw-bold text-dark run-title me-3">Run #</h5>
+                <div class="d-flex flex-column ms-2 overflow-hidden"> <!-- Added overflow-hidden -->
+                    <h5 class="mb-0 fw-bold text-dark run-title text-truncate">Run #</h5>
+
+                    <small class="text-muted run-date text-truncate" style="font-size: 0.75rem; display: block;">
+                        Waiting...
+                    </small>
+
+                </div>
             </div>
 
             <!-- Badge -->

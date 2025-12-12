@@ -23,26 +23,39 @@ def get_all_runs():
         return jsonify([])
         
     runs = []
-    # Iterate over directories in runs folder
-    for dirname in sorted(os.listdir(runs_path), key=lambda x: int(x) if x.isdigit() else 0, reverse=True):
+    all_entries = os.listdir(runs_path)
+    
+    sorted_entries = sorted(all_entries, reverse=True)
+
+    for dirname in sorted_entries:
         dir_full = os.path.join(runs_path, dirname)
+        
+        # Filter for directories only
         if os.path.isdir(dir_full):
             status_file = os.path.join(dir_full, 'status.json')
-            status = "unknown"
             
+            # Default values
+            run_info = {
+                "id": dirname,
+                "status": "unknown",
+                "start_time": "Unknown",
+                "epoch": 0,
+                "loss": None
+            }
+            
+            # Try to read metadata from status.json
             if os.path.exists(status_file):
                 try:
                     with open(status_file, 'r') as f:
                         info = json.load(f)
-                        status = info.get('status', 'unknown')
+                        run_info.update(info) # Merge file data into defaults
                 except:
                     pass
             
-            runs.append({
-                "id": dirname,
-                "status": status
-            })
+            runs.append(run_info)
+            
     return jsonify(runs)
+
 
 @info_bp.route('/run/<run_id>/log', methods=['GET'])
 def get_run_data(run_id):

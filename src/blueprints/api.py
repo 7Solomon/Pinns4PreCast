@@ -130,10 +130,10 @@ def run_training_background(trainer: pl.Trainer, solver, dataloader):
 def train():
     if State().solver is None or State().dataloader is None:
         return jsonify({"error": "Solver or Dataloader not defined"}), 400
+    
+    State().kill_training_signal = False
 
-    #### GET THE NEXT RUN INDEX from the runs directory
-    State().directory_manager.run_idx_path = str(len(os.listdir(State().directory_manager.runs_path)) + 1)
-    os.makedirs(State().directory_manager.checkpoint_path, exist_ok=True)
+    run_id = State().directory_manager.create_new_run()
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=State().directory_manager.checkpoint_path,
@@ -198,6 +198,23 @@ def stop_training():
             return jsonify({"message": "Signal sent to stop training. It will finish the current batch."})
         else:
             return jsonify({"error": "No active trainer found in State."}), 400
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/kill_training', methods=['POST'])
+def kill_training():
+    """
+    Stops training and sets a flag to skip post-training visualizations.
+    """
+    try:
+        trainer = getattr(State(), 'trainer', None)
+        if trainer:
+            State().kill_training_signal = True             
+            trainer.should_stop = True
+            return jsonify({"message": "Training killed. Visualization will be skipped."})
+        else:
+            return jsonify({"error": "No active trainer found."}), 400
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500

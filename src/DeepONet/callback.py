@@ -26,6 +26,10 @@ class VisualizationCallback(Callback):
         trainer: The PyTorch Lightning Trainer object
         pl_module: Your LightningModule (i.e., your 'solver' or model)
         """
+        
+        if getattr(State(), 'kill_training_signal', False):
+            return
+        
         epoch = trainer.current_epoch
         
         if epoch % self.every_n == 0:
