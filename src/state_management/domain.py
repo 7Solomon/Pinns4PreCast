@@ -1,45 +1,53 @@
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Any
-
+from typing import List, Dict
+from pydantic import BaseModel, Field
 
 from src.class_definition.base_state import BaseState
 
-
-@dataclass
-class DomainVariables(BaseState):
-
-    x: List[float] = field(
+class DomainVariables(BaseModel, BaseState):
+    x: List[float] = Field(
         default_factory=lambda: [0.0, 0.4],
-        metadata={"label": "X Range", "unit": "m", "type": "range"},
+        title="X Range",
+        json_schema_extra={"unit": "m", "type": "range"}
     )
-    y: List[float] = field(
+    
+    y: List[float] = Field(
         default_factory=lambda: [0.0, 0.8],
-        metadata={"label": "Y Range", "unit": "m", "type": "range"},
+        title="Y Range",
+        json_schema_extra={"unit": "m", "type": "range"}
     )
-    z: List[float] = field(
+    
+    z: List[float] = Field(
         default_factory=lambda: [0.0, 0.4],
-        metadata={"label": "Z Range", "unit": "m", "type": "range"},
+        title="Z Range",
+        json_schema_extra={"unit": "m", "type": "range"}
     )
-    t: List[float] = field(
+    
+    t: List[float] = Field(
         default_factory=lambda: [0.0, 86400.0],
-        metadata={"label": "Time Range", "unit": "s", "type": "range"},
+        title="Time Range",
+        json_schema_extra={"unit": "s", "type": "range"}
     )  # time in seconds
 
-    T_c: float = field(
+    T_c: float = Field(
         default=50.0,
-        metadata={"label": "Characteristic Temperature", "unit": "°C", "type": "number"},
+        title="Characteristic Temperature",
+        json_schema_extra={"unit": "°C"}
     )
-    L_c: float = field(
+    
+    L_c: float = Field(
         default=0.8,
-        metadata={"label": "Characteristic Length", "unit": "m", "type": "number"},
+        title="Characteristic Length",
+        json_schema_extra={"unit": "m"}
     )
-    t_c: float = field(
+    
+    t_c: float = Field(
         default=86400.0,
-        metadata={"label": "Characteristic Time", "unit": "s", "type": "number"},
+        title="Characteristic Time",
+        json_schema_extra={"unit": "s"}
     )
     
     ### Temporary sensor locations [x,y,z]
-    TEMP_SENS_POINTS: Dict[str, List[float]] = field(
+    TEMP_SENS_POINTS: Dict[str, List[float]] = Field(
         default_factory=lambda: {
             'T1': [0.2, 0, 0.2],
             'T2': [0.4, 0, 0],
@@ -52,5 +60,15 @@ class DomainVariables(BaseState):
             'T9': [0.2, 0.4, 0.4],
             'T10': [0.4, 0.4, 0.2]
         },
-        metadata={"label": "Temperature Sensors", "type": "sensor_dict"},
+        title="Temperature Sensors",
+        description="Dictionary of sensor names and their [x,y,z] coordinates"
     )
+
+    @classmethod
+    def load(cls, path: str):
+        """Loads the domain config from a JSON file."""
+        import os
+        if not os.path.exists(path):
+            return cls.create_default(path)
+        with open(path, 'r') as f:
+            return cls.model_validate_json(f.read())

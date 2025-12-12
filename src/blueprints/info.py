@@ -148,44 +148,6 @@ def get_defaults(config_type):
     default_instance = class_mapping[config_type]()
     return jsonify(asdict(default_instance))
 
-def _extract_fields(cls):
-    """Extract field metadata from dataclass with automatic JSON type detection."""
-    field_info = {}
-    
-    for f in fields(cls):
-        origin = get_origin(f.type)
-        actual_type = origin if origin is not None else f.type
-        
-        if 'type' in f.metadata:
-            ui_type = f.metadata['type']
-        elif actual_type in (dict, Dict):
-            ui_type = 'dict'
-        elif actual_type in (int, float):
-            ui_type = 'number'
-        elif actual_type in (list, List):
-            ui_type = 'list'
-        elif actual_type == bool:
-            ui_type = 'checkbox' 
-        else:
-            ui_type = 'text'
-
-        # 3. Build the schema
-        field_info[f.name] = {
-            'type': ui_type,
-            'label': f.metadata.get('label', f.name.replace('_', ' ').title()),
-            'unit': f.metadata.get('unit', ''),
-            'default': f.default if f.default is not Any else None 
-        }
-        
-        from dataclasses import MISSING
-        if field_info[f.name]['default'] is MISSING:
-            if f.default_factory is not MISSING:
-                field_info[f.name]['default'] = f.default_factory()
-            else:
-                field_info[f.name]['default'] = None
-    return field_info
-
-
 @info_bp.route('/load_state', methods=['POST'])
 def load_state():
     """Updates current_state.json to point to the new active files."""

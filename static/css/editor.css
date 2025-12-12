@@ -1,0 +1,58 @@
+ .json-editor-container .card {
+     border: none !important;
+     background: transparent !important;
+     box-shadow: none !important;
+ }
+
+ /* 2. Style the Headers (Categories) */
+ .json-editor-container h3,
+ .json-editor-container h4 {
+     font-size: 1.1rem;
+     font-weight: 600;
+     color: #495057;
+     margin-top: 1.5rem;
+     margin-bottom: 0.5rem;
+     border-bottom: 2px solid #e9ecef;
+     padding-bottom: 0.5rem;
+ }
+
+ /* 3. Style the Labels (Field names) */
+ .json-editor-container label.form-label {
+     font-size: 0.85rem;
+     font-weight: 600;
+     text-transform: uppercase;
+     color: #6c757d;
+     letter-spacing: 0.5px;
+ }
+
+ /* 4. Make Inputs look modern */
+ .json-editor-container input.form-control {
+     background-color: #f8f9fa;
+     border: 1px solid #dee2e6;
+     padding: 0.5rem;
+     border-radius: 6px;
+ }
+
+ .json-editor-container input.form-control:focus {
+     background-color: #fff;
+     border-color: #86b7fe;
+     box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+ }
+
+ /* 5. Clean up Arrays (Lists) */
+ /* Adds a left border to visually group list items without a box */
+ .json-editor-container div[data-schematype="array"]>div {
+     border-left: 3px solid #e9ecef;
+     padding-left: 1rem;
+     margin-left: 0.5rem;
+ }
+
+ /* 6. Hide the "Collapse" button space if it still takes up room */
+ .json-editor-btn-collapse {
+     display: none !important;
+ }
+
+ /* 7. Hide the "Properties" title that sometimes appears */
+ .card-title {
+     display: none;
+ }

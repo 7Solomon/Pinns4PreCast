@@ -1,15 +1,108 @@
 import json
 import os
-from dataclasses import  asdict, dataclass, field
-from typing import Dict
+from typing import Dict, Optional, Any
+from pydantic import BaseModel, Field
 
+# Import your new Pydantic models
 from src.state_management.config import Config
 from src.state_management.material import ConcreteData
 from src.state_management.domain import DomainVariables
 
+class DirectoryManager(BaseModel):
+    content_path: str = os.path.join('content')
+    runs_path: str = os.path.join('content', 'runs')
+    
+    materials_path: str = os.path.join('content', 'states', 'materials')
+    domains_path: str = os.path.join('content', 'states', 'domains')
+    configs_path: str = os.path.join('content', 'states', 'configs')
+
+    states_file: str = '.current_state.json'
+    run_idx_path: Optional[str] = None
+    
+    # Use Field for mutable defaults
+    state_paths: Dict[str, str] = Field(default_factory=dict)
+
+    @classmethod
+    def create(cls):
+        """Factory method to create and ensure directories exist"""
+        instance = cls()
+        os.makedirs(instance.content_path, exist_ok=True)
+        os.makedirs(instance.runs_path, exist_ok=True)
+        os.makedirs(instance.materials_path, exist_ok=True)
+        os.makedirs(instance.domains_path, exist_ok=True)
+        os.makedirs(instance.configs_path, exist_ok=True)
+        return instance
+
+    def list_state_directories(self):
+        return {
+            'material': self.materials_path, 
+            'domain': self.domains_path, 
+            'config': self.configs_path
+        }
+    
+    def set_directories(self, directories: dict):
+        self.state_paths = {**self.state_paths, **directories}
+
+    # --- Properties for Dynamic Paths ---
+    @property
+    def current_run_path(self):
+        return os.path.join(self.runs_path, self.run_idx_path) if self.run_idx_path else None
+    
+    @property
+    def checkpoint_path(self):
+        return os.path.join(self.runs_path, self.run_idx_path, 'checkpoints')
+    
+    @property
+    def log_path(self):
+        return os.path.join(self.runs_path, self.run_idx_path, 'metrics.csv')
+
+    def get_log_path(self, idx):
+        return os.path.join(self.runs_path, idx, 'metrics.csv')
+    
+    @property
+    def status_path(self):
+        return os.path.join(self.runs_path, self.run_idx_path, 'status.json')
+
+    def get_status_path(self, idx):
+        return os.path.join(self.runs_path, idx, 'status.json')
+
+    @property
+    def vtk_path(self):
+        path = os.path.join(self.runs_path, self.run_idx_path, 'vtk')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def get_vtk_path(self, idx):
+        path = os.path.join(self.runs_path, idx, 'vtk')
+        os.makedirs(path, exist_ok=True)
+        return path
+    
+    @property
+    def sensor_alpha_path(self):
+        path = os.path.join(self.runs_path, self.run_idx_path, 'sensor_alpha')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def get_sensor_alpha_path(self, idx):
+        path = os.path.join(self.runs_path, idx, 'sensor_alpha')
+        os.makedirs(path, exist_ok=True)
+        return path
+    
+    @property
+    def sensor_temp_path(self):
+        path = os.path.join(self.runs_path, self.run_idx_path, 'sensor_temperature')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def get_sensor_temp_path(self, idx):
+        path = os.path.join(self.runs_path, idx, 'sensor_temperature')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+
 class State:
     """
-        THIS is the Singleton class to manage global state incldiung CONFIGS, MATERIAL properties, and DOMAIn variables.
+    Singleton class to manage global state including CONFIGS, MATERIAL properties, and DOMAIN variables.
     """
     _instance = None
     
@@ -23,13 +116,15 @@ class State:
         if self._initialized:
             return
         
+        # Initialize Directory Manager
         self.directory_manager = DirectoryManager.create()
         
-        self.config: Config = None
-        self.material: ConcreteData = None
-        self.domain: DomainVariables = None
+        # State Containers (Pydantic Models)
+        self.config: Optional[Config] = None
+        self.material: Optional[ConcreteData] = None
+        self.domain: Optional[DomainVariables] = None
         
-        # RAM OBjects
+        # RAM Objects (Runtime)
         self.model = None
         self.problem = None
         self.solver = None
@@ -43,10 +138,7 @@ class State:
         self._cleanup_stale_runs()
 
     def _cleanup_stale_runs(self):
-        """
-        Scans all runs on startup. If any run says 'running', it implies the server 
-        crashed or was killed previously. We mark them as 'aborted'.
-        """
+        """Marks 'running' runs as 'aborted' if server restarts."""
         runs_path = self.directory_manager.runs_path
         if not os.path.exists(runs_path):
             return
@@ -60,14 +152,13 @@ class State:
                     if data.get('status') == 'running':
                         data['status'] = 'aborted'
                         data['message'] = 'Server restarted while training'
-                        
                         with open(status_path, 'w') as f:
                             json.dump(data, f, indent=4)
                 except Exception as e:
                     print(f"Error cleaning up run {dirname}: {e}")
 
     def _auto_load_state(self):
-        """Automatically load state from persisted file or defaults"""
+        """Automatically load state from persisted file or defaults."""
         if os.path.exists(self.directory_manager.states_file):
             try:
                 with open(self.directory_manager.states_file, 'r') as f:
@@ -75,6 +166,7 @@ class State:
                     config_file = state_info.get('config')
                     material_file = state_info.get('material')
                     domain_file = state_info.get('domain')
+                    print()
                     
                     if config_file and material_file and domain_file:
                         self.load_state(config_file, material_file, domain_file)
@@ -90,6 +182,7 @@ class State:
             print(f"Could not load default state: {e}")
     
     def load_state(self, config_file: str, material_file: str, domain_file: str):
+        """Loads the state from the specified files."""
         config_path = os.path.join(self.directory_manager.configs_path, config_file)
         material_path = os.path.join(self.directory_manager.materials_path, material_file)
         domain_path = os.path.join(self.directory_manager.domains_path, domain_file)
@@ -100,6 +193,7 @@ class State:
             'domain': domain_path
         })
 
+        # Load using the Pydantic .load() methods we defined
         self.config = Config.load(config_path)
         self.material = ConcreteData.load(material_path)
         self.domain = DomainVariables.load(domain_path)
@@ -117,8 +211,6 @@ class State:
                 json.dump(state_info, f, indent=2)
         except Exception as e:
             print(f"Could not persist state: {e}")
-        except Exception as e:
-            print(f"Could not persist state: {e}")
 
     def get_all_options_data(self):
         """Returns a dictionary with filenames and their content for each category."""
@@ -133,14 +225,17 @@ class State:
 
         for key, path in dirs.items():
             data[key] = {}
-            
             if not os.path.exists(path):
                 os.makedirs(path, exist_ok=True)
 
+            # Generate default if empty
             if len(os.listdir(path)) == 0:
                 default_path = os.path.join(path, 'default.json')
                 if key in class_mapping:
-                    class_mapping[key].create_default(default_path)
+                    # Create default instance and save
+                    instance = class_mapping[key]()
+                    with open(default_path, 'w') as f:
+                        f.write(instance.model_dump_json(indent=4))
 
             for f in os.listdir(path):
                 if f.endswith('.json'):
@@ -152,29 +247,7 @@ class State:
                         data[key][f] = {"error": str(e)}
         return data
 
-    def load_state(self, config_file: str, material_file: str, domain_file: str):
-        """Loads the state from the specified files."""
-        config_path = os.path.join(self.directory_manager.configs_path, config_file)
-        material_path = os.path.join(self.directory_manager.materials_path, material_file)
-        domain_path = os.path.join(self.directory_manager.domains_path, domain_file)
-        
-
-        ## VILEICHT HIER MACHEN DAS DAS ALGEMEINER UST
-        self.directory_manager.set_directories({
-            'config': config_path,
-            'material': material_path,
-            'domain': domain_path
-        })
-
-        self.config = Config.load(config_path)
-        self.material = ConcreteData.load(material_path)
-        self.domain = DomainVariables.load(domain_path)
-        
-        # Persist this state selection
-        self._persist_state(config_file, material_file, domain_file)
-    
     def get_current_state_info(self):
-        """Get information about currently loaded state"""
         if os.path.exists(self.directory_manager.states_file):
             try:
                 with open(self.directory_manager.states_file, 'r') as f:
@@ -190,82 +263,3 @@ class State:
     def update_attributes(self, map: dict):
         for attr, value in map.items():
             setattr(self, attr, value)
-
-    
-@dataclass
-class DirectoryManager:
-    content_path: str = os.path.join('content')
-    runs_path: str = os.path.join('content', 'runs')
-
-    states_file = '.current_state.json'
-    run_idx_path: str = None
-    
-    @property
-    def current_run_path(self):
-        """Full path to current run directory"""
-        return os.path.join(self.runs_path, self.run_idx_path) if self.run_idx_path else None
-    
-    @property
-    def checkpoint_path(self):
-        return os.path.join(self.runs_path, self.run_idx_path, 'checkpoints')
-    
-    @property
-    def log_path(self):
-        """Full path to logs directory"""
-        return os.path.join(self.runs_path, self.run_idx_path, 'metrics.csv')
-    def get_log_path(self, idx):
-        return os.path.join(self.runs_path, idx, 'metrics.csv')
-    
-    @property
-    def status_path(self):
-        return os.path.join(self.runs_path, self.run_idx_path, 'status.json')
-    def get_status_path(self, idx):
-        return os.path.join(self.runs_path, idx, 'status.json')
-
-    
-    @property
-    def vtk_path(self):
-        os.makedirs(os.path.join(self.runs_path, self.run_idx_path, 'vtk'), exist_ok=True)
-        return os.path.join(self.runs_path, self.run_idx_path, 'vtk')
-    def get_vtk_path(self, idx):
-        os.makedirs(os.path.join(self.runs_path, idx, 'vtk'), exist_ok=True)
-        return os.path.join(self.runs_path, idx, 'vtk')
-    
-    @property
-    def sensor_alpha_path(self):
-        os.makedirs(os.path.join(self.runs_path, self.run_idx_path, 'sensor_alpha'), exist_ok=True)
-        return os.path.join(self.runs_path, self.run_idx_path, 'sensor_alpha')
-    def get_sensor_alpha_path(self, idx):
-        os.makedirs(os.path.join(self.runs_path, idx, 'sensor_alpha'), exist_ok=True)
-        return os.path.join(self.runs_path, idx, 'sensor_alpha')
-    
-    @property
-    def sensor_temp_path(self):
-        os.makedirs(os.path.join(self.runs_path, self.run_idx_path, 'sensor_temperature'), exist_ok=True)
-        return os.path.join(self.runs_path, self.run_idx_path, 'sensor_temperature')
-    def get_sensor_temp_path(self, idx):
-        os.makedirs(os.path.join(self.runs_path, idx, 'sensor_temperature'), exist_ok=True)
-        return os.path.join(self.runs_path, idx, 'sensor_temperature')
-
-    materials_path: str = os.path.join('content', 'states', 'materials')
-    domains_path: str = os.path.join('content', 'states', 'domains')
-    configs_path: str = os.path.join('content', 'states', 'configs')
-    
-    state_paths: Dict[str, os.PathLike] = field(default_factory=lambda: {})   # inside here keys are [ 'material', 'domain', 'config']
-
-    def list_state_directories(self):
-        return {'material': self.materials_path, 'domain': self.domains_path, 'config': self.configs_path}
-    
-    def set_directories(self, directories: dict):
-        self.state_paths = {**self.state_paths, **directories }
-
-    @classmethod
-    def create(cls):
-        os.makedirs(cls.content_path, exist_ok=True)
-        os.makedirs(cls.runs_path, exist_ok=True)
-        os.makedirs(cls.materials_path, exist_ok=True)
-        os.makedirs(cls.domains_path, exist_ok=True)
-        os.makedirs(cls.configs_path, exist_ok=True)
-        return cls()
-
-

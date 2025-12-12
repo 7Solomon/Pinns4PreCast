@@ -1,181 +1,144 @@
 {% extends "base.html" %}
-{% from "components/form_fields.html" import number_field, text_field, range_field, render_dynamic_fields, json_field %}
 
 {% block title %}Configuration Setup{% endblock %}
 
 {% block content %}
 
-{# --- MACRO: Render Accordion Item --- #}
-{% macro render_accordion_item(index, type, filename, data, active_filename, schema) %}
-<div class="accordion-item border mb-2 rounded shadow-sm">
-    <h2 class="accordion-header">
-        <button
-            class="accordion-button collapsed {% if filename == active_filename %}bg-success-subtle text-success fw-bold{% endif %}"
-            type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ type }}-{{ index }}">
-
-            <!-- Icon based on type -->
-            {% if type == 'config' %}<i class="bi bi-sliders me-2"></i>{% endif %}
-            {% if type == 'material' %}<i class="bi bi-box-seam me-2"></i>{% endif %}
-            {% if type == 'domain' %}<i class="bi bi-grid-3x3 me-2"></i>{% endif %}
-
-            {{ filename }}
-
-            {% if filename == active_filename %}
-            <span class="badge bg-success ms-auto">Active</span>
-            {% endif %}
-        </button>
-    </h2>
-    <div id="collapse-{{ type }}-{{ index }}" class="accordion-collapse collapse"
-        data-bs-parent="#accordion{{ type|capitalize }}">
-        <div class="accordion-body bg-light">
-            <!-- FORM START -->
-            <form onsubmit="SetupManager.saveInline(event, '{{ type }}', '{{ filename }}')">
-
-                <div class="bg-white p-3 rounded shadow-sm mb-3">
-                    {{ render_dynamic_fields(schema, data) }}
-                </div>
-
-                <!-- Actions Footer -->
-                <div class="d-flex gap-2 pt-2 border-top">
-                    <button type="submit" class="btn btn-success flex-grow-1">
-                        <i class="bi bi-save"></i> Save Changes
-                    </button>
-
-                    {% if filename != active_filename %}
-                    <button type="button" class="btn btn-outline-primary flex-grow-1"
-                        onclick="SetupManager.setActive('{{ type }}', '{{ filename }}')">
-                        <i class="bi bi-check-circle"></i> Set Active
-                    </button>
-                    {% else %}
-                    <button type="button" class="btn btn-primary flex-grow-1" disabled>
-                        <i class="bi bi-check-circle-fill"></i> Currently Active
-                    </button>
-                    {% endif %}
-
-                    <button type="button" class="btn btn-outline-danger"
-                        onclick="SetupManager.deleteFile('{{ type }}', '{{ filename }}')">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endmacro %}
-
-
-{# ================================================================= #}
-{# MAIN PAGE CONTENT #}
-{# ================================================================= #}
-
-<!-- JSON Editor CSS (Required for the JSON fields) -->
+<!-- LIBRARIES -->
+<script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.2/jsoneditor.min.css" rel="stylesheet"
     type="text/css">
+<link href="static/css/editor.css" rel="stylesheet" type="text/css">
 
-<!-- 1. HEADER -->
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-0">Configuration Setup</h2>
-        <p class="text-muted">Manage parameters, material properties, and domains</p>
+<script>
+    var schemasJSON = '{{ schemas | tojson | safe }}';
+    var filesJSON = '{{ options_data | tojson | safe }}';
+    var activeJSON = '{{ current_state | tojson | safe }}';
+
+    window.SCHEMAS = JSON.parse(schemasJSON);
+    window.FILES = JSON.parse(filesJSON);
+    window.ACTIVE_FILES = JSON.parse(activeJSON);
+</script>
+
+
+<div class="container-fluid">
+    <!-- HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Configuration Setup</h2>
+            <p class="text-muted">Manage parameters, material properties, and domains</p>
+        </div>
+    </div>
+
+    <!-- ACTIVE STATE SUMMARY -->
+    <div class="card shadow-sm mb-4 border-0 bg-light">
+        <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <h5 class="mb-0 text-secondary"><i class="bi bi-info-circle-fill me-2"></i>Current Active State</h5>
+            <div class="d-flex gap-2 flex-wrap">
+                <!-- We try to access the filename property if available, otherwise fallback -->
+                <span class="badge bg-primary fs-6 px-3 py-2">
+                    <i class="bi bi-sliders me-1"></i>
+                    <span id="badge-config">{{ current_state.config if current_state.config is string else 'Active'
+                        }}</span>
+                </span>
+                <span class="badge bg-success fs-6 px-3 py-2">
+                    <i class="bi bi-box-seam me-1"></i>
+                    <span id="badge-material">{{ current_state.material if current_state.material is string else
+                        'Active' }}</span>
+                </span>
+                <span class="badge bg-info text-dark fs-6 px-3 py-2">
+                    <i class="bi bi-grid-3x3 me-1"></i>
+                    <span id="badge-domain">{{ current_state.domain if current_state.domain is string else 'Active'
+                        }}</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABS -->
+    <ul class="nav nav-tabs nav-fill mb-3" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#tab-config" type="button">
+                Configuration
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-material" type="button">
+                Material
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-domain" type="button">
+                Domain
+            </button>
+        </li>
+    </ul>
+
+    <!-- TAB CONTENT -->
+    <div class="tab-content">
+        {% for type in ['config', 'material', 'domain'] %}
+        <div class="tab-pane fade {% if type == 'config' %}show active{% endif %}" id="tab-{{ type }}" role="tabpanel">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="text-muted text-capitalize">{{ type }} Files</h5>
+                <button class="btn btn-primary btn-sm" onclick="SetupManager.createNew('{{ type }}')">
+                    <i class="bi bi-plus-lg"></i> Add New
+                </button>
+            </div>
+
+            <div class="accordion accordion-flush" id="accordion{{ type }}">
+                {% for filename, data in options_data[type].items() %}
+                <div class="accordion-item border mb-2 rounded shadow-sm">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#collapse-{{ type }}-{{ loop.index }}">
+                            <strong>{{ filename }}</strong>
+                            <!-- Check if this file is the active one -->
+                            {% if current_state[type] == filename %}
+                            <span class="badge bg-success ms-auto">Active</span>
+                            {% endif %}
+                        </button>
+                    </h2>
+                    <div id="collapse-{{ type }}-{{ loop.index }}" class="accordion-collapse collapse"
+                        data-bs-parent="#accordion{{ type }}">
+                        <div class="accordion-body bg-light">
+
+                            <!-- EDITOR CONTAINER -->
+                            <!-- Note: We do NOT pass data-value here anymore to avoid parsing errors -->
+                            <div class="editor-mount-point bg-white p-3 rounded shadow-sm mb-3"
+                                id="editor-{{ type }}-{{ loop.index }}" data-type="{{ type }}"
+                                data-filename="{{ filename }}">
+                            </div>
+
+                            <!-- ACTIONS -->
+                            <div class="d-flex gap-2 pt-2 border-top">
+                                <button type="button" class="btn btn-success flex-grow-1"
+                                    onclick="SetupManager.save('{{ type }}', '{{ filename }}', 'editor-{{ type }}-{{ loop.index }}')">
+                                    <i class="bi bi-save"></i> Save Changes
+                                </button>
+
+                                {% if current_state[type] != filename %}
+                                <button type="button" class="btn btn-outline-primary flex-grow-1"
+                                    onclick="SetupManager.setActive('{{ type }}', '{{ filename }}')">
+                                    Set Active
+                                </button>
+                                {% endif %}
+
+                                <button type="button" class="btn btn-outline-danger"
+                                    onclick="SetupManager.deleteFile('{{ type }}', '{{ filename }}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
 
-<!-- 2. ACTIVE STATE SUMMARY -->
-<div class="card shadow-sm mb-4 border-0 bg-light">
-    <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-3">
-        <h5 class="mb-0 text-secondary"><i class="bi bi-info-circle-fill me-2"></i>Current Active State</h5>
-        <div class="d-flex gap-2 flex-wrap">
-            <span class="badge bg-primary fs-6 px-3 py-2"><i class="bi bi-sliders"></i> {{ current_state.config
-                }}</span>
-            <span class="badge bg-success fs-6 px-3 py-2"><i class="bi bi-box-seam"></i> {{ current_state.material
-                }}</span>
-            <span class="badge bg-info text-dark fs-6 px-3 py-2"><i class="bi bi-grid-3x3"></i> {{ current_state.domain
-                }}</span>
-        </div>
-    </div>
-</div>
-
-<!-- 3. TABS NAVIGATION -->
-<ul class="nav nav-tabs nav-fill mb-3" id="configTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active fw-bold" id="config-tab" data-bs-toggle="tab" data-bs-target="#tab-config"
-            type="button">
-            <i class="bi bi-sliders"></i> Configuration
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold" id="material-tab" data-bs-toggle="tab" data-bs-target="#tab-material"
-            type="button">
-            <i class="bi bi-box-seam"></i> Material
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold" id="domain-tab" data-bs-toggle="tab" data-bs-target="#tab-domain"
-            type="button">
-            <i class="bi bi-grid-3x3"></i> Domain
-        </button>
-    </li>
-</ul>
-
-<!-- 4. TAB CONTENT WRAPPER -->
-<div class="tab-content" id="configTabContent">
-
-    <!-- TAB 1: CONFIG -->
-    <div class="tab-pane fade show active" id="tab-config" role="tabpanel">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="text-muted">Available Config Files</h5>
-            <button class="btn btn-primary btn-sm" onclick="SetupManager.createNew('config')">
-                <i class="bi bi-plus-lg"></i> Add New Config
-            </button>
-        </div>
-        <div class="accordion accordion-flush" id="accordionConfig">
-            {% for filename, data in options_data['config'].items() %}
-            {{ render_accordion_item(loop.index, 'config', filename, data, current_state.config, config_schema) }}
-            {% else %}
-            <div class="alert alert-warning">No configuration files found.</div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <!-- TAB 2: MATERIAL -->
-    <div class="tab-pane fade" id="tab-material" role="tabpanel">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="text-muted">Available Material Files</h5>
-            <button class="btn btn-primary btn-sm" onclick="SetupManager.createNew('material')">
-                <i class="bi bi-plus-lg"></i> Add New Material
-            </button>
-        </div>
-        <div class="accordion accordion-flush" id="accordionMaterial">
-            {% for filename, data in options_data['material'].items() %}
-            {{ render_accordion_item(loop.index, 'material', filename, data, current_state.material, material_schema) }}
-            {% else %}
-            <div class="alert alert-warning">No material files found.</div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <!-- TAB 3: DOMAIN -->
-    <div class="tab-pane fade" id="tab-domain" role="tabpanel">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="text-muted">Available Domain Files</h5>
-            <button class="btn btn-primary btn-sm" onclick="SetupManager.createNew('domain')">
-                <i class="bi bi-plus-lg"></i> Add New Domain
-            </button>
-        </div>
-        <div class="accordion accordion-flush" id="accordionDomain">
-            {% for filename, data in options_data['domain'].items() %}
-            {{ render_accordion_item(loop.index, 'domain', filename, data, current_state.domain, domain_schema) }}
-            {% else %}
-            <div class="alert alert-warning">No domain files found.</div>
-            {% endfor %}
-        </div>
-    </div>
-
-</div>
-
-<!-- LIBRARIES & SCRIPTS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.2/jsoneditor.min.js"></script>
-<!-- Custom JS Logic -->
 <script src="{{ url_for('static', filename='js/setup_manager.js') }}"></script>
-
 {% endblock %}
