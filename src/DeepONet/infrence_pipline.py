@@ -6,9 +6,7 @@ from scipy.stats import qmc
 from src.DeepONet.dataset import DeepONetDataset
 from src.DeepONet.vis import export_to_vtk_series, export_sensors_to_csv
 
-
 from src.utils import unscale_T
-from src.state_management.state import State
 
 
 """"

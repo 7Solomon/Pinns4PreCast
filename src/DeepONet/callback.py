@@ -6,8 +6,6 @@ import os
 from src.DeepONet.dataset import DeepONetDataset
 from src.DeepONet.infrence_pipline import create_test_grid
 from src.DeepONet.vis import export_sensors_to_csv, export_to_vtk_series
-from src.state_management.state import State
-from src.utils import unscale_T
 
 
 class VisualizationCallback(Callback):

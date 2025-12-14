@@ -7,26 +7,33 @@ from pina.optim import TorchScheduler
 from pydantic import BaseModel, Field
 import os
 
-from src.class_definition.base_state import BaseState
+from src.model.base_state import BaseState
+
 
 class DatasetConfig(BaseModel):
     n_pde: int = Field(default=500, title="PDE Samples")
     n_ic: int = Field(default=100, title="IC Samples")
     n_bc_face: int = Field(default=50, title="BC Samples per face")
-    batch_size: int = Field(default=32, title="Batch Size")
     num_samples: int = Field(default=10000, title="Total Samples")
-    num_workers: int = Field(default=0, title="DataLoader Workers") # Changed to 0, 91 is unusually high
 
-class ModelConfig(BaseModel):
+class DataLoaderConfig(BaseModel):
+    batch_size: int = Field(default=32, title="Batch Size")
+    num_workers: int = Field(default=91, title="DataLoader Workers")
+    shuffle: bool = Field(default=True, title="Shuffle Data")
+
+
+class InputConfig(BaseModel):
     num_sensors_bc: int = Field(default=100, title="BC Sensor Count")
     num_sensors_ic: int = Field(default=100, title="IC Sensor Count")
+
+class ModelConfig(BaseModel):
+
     num_outputs: int = Field(default=2, title="Model Outputs")
     latent_dim: int = Field(default=256, title="Latent Dimension")
     
-    branch_configs: List[Dict[str, Any]] = Field(default_factory=lambda: [
-        {'input_size': 100, 'hidden_layers': [256, 256, 256]},
-        {'input_size': 100, 'hidden_layers': [256, 256, 256]}
-    ], title="Branch Configs")
+    branch_hidden_layers: List[int] = Field(default_factory=lambda: 
+        [256, 256, 256],
+    title="Branch Configs")
     
     trunk_config: Dict[str, Any] = Field(default_factory=lambda: {
         'input_size': 4, 'hidden_layers': [256, 256, 256]
@@ -51,6 +58,15 @@ class ModelConfig(BaseModel):
             'trunk': getattr(nn, self.activation_types['trunk'])
         }
 
+class CompositeDatasetConfig(BaseModel):
+    data_config: DatasetConfig = Field(default_factory=DatasetConfig)
+    input_config: InputConfig = Field(default_factory=InputConfig) 
+
+class CompositeModelConfig(BaseModel):
+    model_hyperparameter: ModelConfig = Field(default_factory=ModelConfig)
+    input_config: InputConfig = Field(default_factory=InputConfig) 
+
+
 class TrainingConfig(BaseModel):
     max_epochs: int = Field(default=100, title="Max Epochs")
     loss_weights: Dict[str, float] = Field(default_factory=lambda: {'physics': 100.0, 'bc': 1.0, 'ic': 10.0}, title="Loss Weights")
@@ -58,6 +74,8 @@ class TrainingConfig(BaseModel):
     
     optimizer_type: str = Field(default='Adam', title="Optimizer")
     optimizer_learning_rate: float = Field(default=1e-4, title="Learning Rate")
+
+    accelerator: str = Field(default='auto', title="Accelerator")
 
     scheduler_type: str = Field(default='ReduceLROnPlateau', title="Scheduler")
     scheduler_mode: str = Field(default='min', title="Scheduler Mode")

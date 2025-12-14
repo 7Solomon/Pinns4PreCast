@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from src.class_definition.base_state import BaseState
+from src.model.base_state import BaseState
 
 class BasePhysics(BaseModel, BaseState):
     g: float = Field(default=9.81, description="Gravity [m/s^2]")

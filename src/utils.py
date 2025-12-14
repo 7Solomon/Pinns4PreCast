@@ -5,7 +5,6 @@ from pina import LabelTensor # Ensure LabelTensor is imported if checking isinst
 from dataclasses import fields, is_dataclass
 import typing
 
-from src.state_management.state import State
 
 def unscale_T(T_scaled):
     return (T_scaled * State().domain.T_c) + State().material.Temp_ref

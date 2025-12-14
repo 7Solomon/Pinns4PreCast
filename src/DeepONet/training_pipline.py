@@ -49,6 +49,14 @@ class DeepONetSolver(SingleSolverInterface):
     def setup(self, stage):
         """Override setup to avoid PINA-specific trainer attributes."""  # JUST PASS BECAUSE 
         pass
+    def on_train_start(self):
+        """
+        OVERRIDE: This method replaces the buggy method in PINA's library.
+        The original method tries to access 'self.trainer.compile', which 
+        does not exist in my version of Lightning.
+        """
+        pass
+
     
     def forward(self, batch):
         """

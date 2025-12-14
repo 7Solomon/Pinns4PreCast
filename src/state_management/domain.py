@@ -1,7 +1,9 @@
 from typing import List, Dict
+from pina import LabelTensor
 from pydantic import BaseModel, Field
+import torch
 
-from src.class_definition.base_state import BaseState
+from src.model.base_state import BaseState
 
 class DomainVariables(BaseModel, BaseState):
     x: List[float] = Field(
@@ -63,6 +65,64 @@ class DomainVariables(BaseModel, BaseState):
         title="Temperature Sensors",
         description="Dictionary of sensor names and their [x,y,z] coordinates"
     )
+    def unscale_T(self, T_scaled, Temp_ref):
+        return (T_scaled * self.T_c) + Temp_ref
+
+    def scale_T(self, T_actual, Temp_ref):
+        return (T_actual - Temp_ref) / self.T_c
+
+    def unscale_alpha(self, alpha_scaled, deg_hydr_max):
+        return alpha_scaled * deg_hydr_max
+
+    def scale_alpha(self, alpha_actual, deg_hydr_max):
+        return alpha_actual / deg_hydr_max
+    
+    def scale_domain(self, coords):
+        if isinstance(coords, LabelTensor):
+            coords_scaled = coords.clone()
+            data = coords_scaled.as_subclass(torch.Tensor)
+
+            idx_x = coords.labels.index('x')
+            idx_y = coords.labels.index('y')
+            idx_z = coords.labels.index('z')
+            idx_t = coords.labels.index('t')
+            
+            data[:, idx_x] /= self.L_c
+            data[:, idx_y] /= self.L_c
+            data[:, idx_z] /= self.L_c
+            data[:, idx_t] /= self.t_c
+            return coords_scaled
+        else:
+            # Assuming [x, y, z, t]
+            coords_scaled = coords.clone()
+            coords_scaled[:, 0] /= self.L_c
+            coords_scaled[:, 1] /= self.L_c
+            coords_scaled[:, 2] /= self.L_c
+            coords_scaled[:, 3] /= self.t_c
+            return coords_scaled
+
+    def unscale_domain(self, coords_scaled):
+        if isinstance(coords_scaled, LabelTensor):
+            coords = coords_scaled.clone()
+            data = coords.as_subclass(torch.Tensor)
+            
+            idx_x = coords.labels.index('x')
+            idx_y = coords.labels.index('y')
+            idx_z = coords.labels.index('z')
+            idx_t = coords.labels.index('t')
+            
+            data[:, idx_x] *= self.L_c
+            data[:, idx_y] *= self.L_c
+            data[:, idx_z] *= self.L_c
+            data[:, idx_t] *= self.t_c
+            return coords
+        else:
+            coords = coords_scaled.clone()
+            coords[:, 0] *= self.L_c
+            coords[:, 1] *= self.L_c
+            coords[:, 2] *= self.L_c
+            coords[:, 3] *= self.t_c
+            return coords
 
     @classmethod
     def load(cls, path: str):

@@ -2,12 +2,9 @@ import torch
 from torch.utils.data import Dataset
 from pina import LabelTensor
 
-from src.utils import scale_T, scale_domain
-
-from src.state_management.state import State
 
 
-def sample_random_field_params(num_features=10, device='cpu'):
+def sample_random_field_params(Temp_ref, num_features=10, device='cpu'):
     """
     Generates random frequencies and phases for a smooth random field.
     f(x) = sum(A * cos(k*x + phi))
@@ -23,7 +20,7 @@ def sample_random_field_params(num_features=10, device='cpu'):
     A = torch.randn(num_features, device=device)
     
     # Base offset (Mean temperature)
-    offset = State().material.Temp_ref + torch.randn(1, device=device) * 5.0 # +/- 5 deg variation
+    offset = Temp_ref + torch.randn(1, device=device) * 5.0 # +/- 5 deg variation
     
     return k, phi, A, offset
 
@@ -56,8 +53,10 @@ class DeepONetDataset(Dataset):
     """
         THE dataset Generation where the random field samples are created for BC and IC and also the BC and IC points for LOSS calculation
     """
-    def __init__(self, problem, n_pde, n_ic, n_bc_face, num_samples, num_sensors_bc, num_sensors_ic):
+    def __init__(self, problem, domain, material, n_pde, n_ic, n_bc_face, num_samples, num_sensors_bc, num_sensors_ic):
         self.problem = problem
+        self.domain = domain
+        self.material = material
         self.n_pde = n_pde
         self.n_ic = n_ic
         self.n_bc_face = n_bc_face # Points per face for LOSS
@@ -84,12 +83,12 @@ class DeepONetDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        k_bc, phi_bc, A_bc, offset_bc = sample_random_field_params(num_features=20)   # BC MORE FEATURES
-        k_ic, phi_ic, A_ic, offset_ic = sample_random_field_params(num_features=5)  # IC LESS FEATURES
+        k_bc, phi_bc, A_bc, offset_bc = sample_random_field_params(self.material.Temp_ref, num_features=20)   # BC MORE FEATURES
+        k_ic, phi_ic, A_ic, offset_ic = sample_random_field_params(self.material.Temp_ref, num_features=5)  # IC LESS FEATURES
         A_ic = A_ic * 0.2  # BEcause IC in concrete GOOD MIXED 
 
-        bc_T_sensors_vals = scale_T(eval_random_field(self.bc_sensor_coords, k_bc, phi_bc, A_bc, offset_bc)).squeeze(-1).as_subclass(torch.Tensor)
-        ic_T_sensors_vals = scale_T(eval_random_field(self.ic_sensor_coords, k_ic, phi_ic, A_ic, offset_ic)).squeeze(-1).as_subclass(torch.Tensor)
+        bc_T_sensors_vals = self.domain.scale_T(eval_random_field(self.bc_sensor_coords, k_bc, phi_bc, A_bc, offset_bc), self.material.Temp_ref).squeeze(-1).as_subclass(torch.Tensor)
+        ic_T_sensors_vals = self.domain.scale_T(eval_random_field(self.ic_sensor_coords, k_ic, phi_ic, A_ic, offset_ic), self.material.Temp_ref).squeeze(-1).as_subclass(torch.Tensor)
 
 
         ## DIFRENT SO THAT BC not grid but Random so that model learns 
@@ -97,18 +96,18 @@ class DeepONetDataset(Dataset):
             self.problem.domain[face].sample(n=self.n_bc_face) 
             for face in self.boundary_faces
         ])
-        bc_T_target_vals = scale_T(eval_random_field(bc_loss_pts, k_bc, phi_bc, A_bc, offset_bc)).squeeze(-1).as_subclass(torch.Tensor)
+        bc_T_target_vals = self.domain.scale_T(eval_random_field(bc_loss_pts, k_bc, phi_bc, A_bc, offset_bc), self.material.Temp_ref).squeeze(-1).as_subclass(torch.Tensor)
 
         ic_loss_pts = self.problem.domain["initial"].sample(n=self.n_ic)
-        ic_T_target_vals = scale_T(eval_random_field(ic_loss_pts, k_ic, phi_ic, A_ic, offset_ic)).squeeze(-1).as_subclass(torch.Tensor)
+        ic_T_target_vals = self.domain.scale_T(eval_random_field(ic_loss_pts, k_ic, phi_ic, A_ic, offset_ic),  self.material.Temp_ref).squeeze(-1).as_subclass(torch.Tensor)
         ic_target_alpha_vals = (torch.ones_like(ic_T_target_vals) * 1e-6).as_subclass(torch.Tensor)
 
         pde_pts = self.problem.domain["D"].sample(n=self.n_pde)
 
         # 4. Scaling & Formatting
-        pde_pts = scale_domain(pde_pts).as_subclass(torch.Tensor)
-        ic_loss_pts = scale_domain(ic_loss_pts).as_subclass(torch.Tensor)
-        bc_loss_pts = scale_domain(bc_loss_pts).as_subclass(torch.Tensor)
+        pde_pts = self.domain.scale_domain(pde_pts).as_subclass(torch.Tensor)
+        ic_loss_pts = self.domain.scale_domain(ic_loss_pts).as_subclass(torch.Tensor)
+        bc_loss_pts = self.domain.scale_domain(bc_loss_pts).as_subclass(torch.Tensor)
         
         #ic_T_vals = ic_T_vals.as_subclass(torch.Tensor)
         #ic_alpha_vals = ic_alpha_vals.as_subclass(torch.Tensor)
