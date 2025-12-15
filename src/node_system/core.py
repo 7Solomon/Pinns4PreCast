@@ -35,6 +35,8 @@ class PortType(str, Enum):
     TENSOR = "tensor"
     ANY = "any"
 
+    RUN_ID = "run_id"  # maybe?
+
 
 @dataclass
 class Port:

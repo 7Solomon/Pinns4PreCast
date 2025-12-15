@@ -5,13 +5,43 @@ from pydantic import BaseModel, Field
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 from src.DeepONet.infrence_pipline import create_test_grid
 from src.DeepONet.vis import export_sensors_to_csv
-from src.DeepONet.dataset import DeepONetDataset
+
 
 # Config for Resolution
 class InferenceConfig(BaseModel):
     n_spatial: int = Field(15, title="Grid points per spatial axis")
     n_time: int = Field(15, title="Grid points for time")
     save_dir: str = Field("./results", title="Output directory")
+
+    
+def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 
+                     n_spatial=15, n_time=30):
+    """
+    Returns:
+        test_coords: tensor of shape [n_spatial^3 * n_time, 4]
+    """
+    # Create 1D grids
+    x = torch.linspace(spatial_domain[0][0], spatial_domain[0][1], n_spatial)
+    y = torch.linspace(spatial_domain[1][0], spatial_domain[1][1], n_spatial)
+    z = torch.linspace(spatial_domain[2][0], spatial_domain[2][1], n_spatial)
+    t = torch.linspace(time_domain[0], time_domain[1], n_time)
+    
+    # Create 4D meshgrid
+    X, Y, Z, T = torch.meshgrid(x, y, z, t, indexing='ij')
+    
+    # Flatten and stack
+    test_coords = torch.stack([X.flatten(), Y.flatten(), 
+                               Z.flatten(), T.flatten()], dim=1)
+    
+    #print(f"Created test grid:")
+    #print(f"  X range: [{test_coords[:, 0].min():.3f}, {test_coords[:, 0].max():.3f}]")
+    #print(f"  Y range: [{test_coords[:, 1].min():.3f}, {test_coords[:, 1].max():.3f}]")
+    #print(f"  Z range: [{test_coords[:, 2].min():.3f}, {test_coords[:, 2].max():.3f}]")
+    #print(f"  T range: [{test_coords[:, 3].min():.3f}, {test_coords[:, 3].max():.3f}]")
+    
+    return test_coords
+
+
 
 @register_node("deeponet_inference")
 class DeepONetInferenceNode(Node):
