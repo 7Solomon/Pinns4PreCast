@@ -2,6 +2,7 @@ from typing import List, Dict
 from pina import LabelTensor
 from pydantic import BaseModel, Field
 import torch
+from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 
 from src.model.base_state import BaseState
 
@@ -62,8 +63,7 @@ class DomainVariables(BaseModel, BaseState):
             'T9': [0.2, 0.4, 0.4],
             'T10': [0.4, 0.4, 0.2]
         },
-        title="Temperature Sensors",
-        description="Dictionary of sensor names and their [x,y,z] coordinates"
+        title="Dictionary of sensor names and their [x,y,z] coordinates"
     )
     def unscale_T(self, T_scaled, Temp_ref):
         return (T_scaled * self.T_c) + Temp_ref
@@ -132,3 +132,26 @@ class DomainVariables(BaseModel, BaseState):
             return cls.create_default(path)
         with open(path, 'r') as f:
             return cls.model_validate_json(f.read())
+
+
+
+@register_node("spatial_domain")
+class DomainNode(Node):
+    @classmethod
+    def get_input_ports(cls):
+        return []
+
+    @classmethod
+    def get_output_ports(cls):
+        return [Port("domain", PortType.DOMAIN)]
+
+    @classmethod
+    def get_metadata(cls):
+        return NodeMetadata("Parameters", "Space/Time Domain", "Defines x,y,z,t bounds", icon="globe")
+
+    @classmethod
+    def get_config_schema(cls):
+        return DomainVariables
+
+    def execute(self):
+        return {"domain": self.config}

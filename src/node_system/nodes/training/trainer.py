@@ -1,8 +1,8 @@
 import lightning.pytorch as pl
 from typing import Dict, Any, List
 
+from src.node_system.configs.training import TrainingConfig
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
-from src.state_management.config import TrainingConfig
 
 @register_node("lightning_trainer")
 class LightningTrainerNode(Node):
@@ -14,19 +14,22 @@ class LightningTrainerNode(Node):
     @classmethod
     def get_input_ports(cls) -> Dict[str, Port]:
         return {
-            "solver": Port(PortType.SOLVER, required=True, description="Initialized LightningModule"),
-            "dataloader": Port(PortType.DATALOADER, required=True, description="Train DataLoader"),
-            "val_dataloader": Port(PortType.DATALOADER, required=False, description="Validation DataLoader"),
-            "callbacks": Port("callback", required=False),
-            "logger": Port("logger", required=False),
-            "training_config": Port(PortType.CONFIG, required=False)
+            "solver": Port("solver", PortType.SOLVER, required=True, description="Initialized LightningModule"),
+            "dataloader": Port("dataloader", PortType.DATALOADER, required=True, description="Train DataLoader"),
+            "val_dataloader": Port("val_dataloader", PortType.DATALOADER, required=False, description="Validation DataLoader"),
+            
+            "callbacks": Port("callbacks", PortType.CALLBACK, required=False),
+            
+            "logger": Port("logger", PortType.LOGGER, required=False),
+            
+            "training_config": Port("training_config", PortType.CONFIG, required=False)
         }
 
     @classmethod
     def get_output_ports(cls) -> Dict[str, Port]:
         return {
-            "trained_solver": Port(PortType.SOLVER),
-            "checkpoint_path": Port(PortType.CONFIG)
+            "trained_solver": Port("trained_solver", PortType.SOLVER),
+            "checkpoint_path": Port("checkpoint_path", PortType.CONFIG)
         }
 
     @classmethod
@@ -68,7 +71,7 @@ class LightningTrainerNode(Node):
             callbacks=callbacks_list,
             logger=logger if logger else False,
             accelerator=t_cfg.accelerator,
-            enable_checkpointing=bool(callbacks_list), # Only enable if we have callbacks (like CheckpointSaver)
+            enable_checkpointing=bool(callbacks_list), 
         )
 
         print(f"[Trainer] Starting fit for {t_cfg.max_epochs} epochs...")

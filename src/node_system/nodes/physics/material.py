@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field
+from src.node_system.core import Node, NodeMetadata, Port, PortType, register_node
 from src.model.base_state import BaseState
 
 class BasePhysics(BaseModel, BaseState):
-    g: float = Field(default=9.81, description="Gravity [m/s^2]")
-    Temp_ref: float = Field(default=298.15, description="Reference Temp [K]")
-    R: float = Field(default=8.31446261815324, description="Gas Constant [J/(mol*K)]")
+    g: float = Field(default=9.81, title="Gravity [m/s^2]")
+    Temp_ref: float = Field(default=298.15, title="Reference Temp [K]")
+    R: float = Field(default=8.31446261815324, title="Gas Constant [J/(mol*K)]")
 
 
 
@@ -77,3 +78,28 @@ class ConcreteData(BasePhysics):
             return cls.create_default(path)
         with open(path, 'r') as f:
             return cls.model_validate_json(f.read())
+
+
+
+@register_node("concrete_material")
+class ConcreteMaterialNode(Node):
+    @classmethod
+    def get_input_ports(cls):
+        return []
+
+    @classmethod
+    def get_output_ports(cls):
+        return [Port("material", PortType.MATERIAL)]
+
+    @classmethod
+    def get_metadata(cls):
+        return NodeMetadata("Parameters", "Concrete Material", "Defines density, conductivity, etc.", icon="cube")
+
+    @classmethod
+    def get_config_schema(cls):
+        return ConcreteData
+
+    def execute(self):
+        # The config IS the ConcreteData object because of Pydantic magic
+        return {"material": self.config}
+

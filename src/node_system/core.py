@@ -28,6 +28,7 @@ class PortType(str, Enum):
     OPTIMIZER = "optimizer"
     SCHEDULER = "scheduler"
     CALLBACK = 'callback'
+    LOGGER = 'logger'
     CONFIG = "config"
     MATERIAL = "material"
     DOMAIN = "domain"
@@ -152,7 +153,7 @@ class NodeRegistry:
         """Register a node class."""
         node_type = node_type or node_class.__name__
         cls._nodes[node_type] = node_class
-        print(f"Registered node: {node_type}")
+        #print(f"Registered node: {node_type}")
     
     @classmethod
     def get(cls, node_type: str) -> Type[Node]:
@@ -328,19 +329,19 @@ class NodeGraph:
         
         return cls.from_dict(data)
 
-def get_config_snapshot(self) -> dict:
-    """
-    Get fully resolved configuration for all nodes.
-    Useful for reproducing exact settings later.
-    """
-    snapshot = {}
-    for node_id, node in self.nodes.items():
-        snapshot[node_id] = {
-            "type": node.__class__.__name__,
-            "config_class": node.get_config_schema().__name__ if node.get_config_schema() else None,
-            "config": node.config.dict() if hasattr(node, 'config') and node.config else {}
-        }
-    return snapshot
+    def get_config_snapshot(self) -> dict:
+        """
+        Get fully resolved configuration for all nodes.
+        Useful for reproducing exact settings later.
+        """
+        snapshot = {}
+        for node_id, node in self.nodes.items():
+            snapshot[node_id] = {
+                "type": node.__class__.__name__,
+                "config_class": node.get_config_schema().__name__ if node.get_config_schema() else None,
+                "config": node.config.dict() if hasattr(node, 'config') and node.config else {}
+            }
+        return snapshot
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize graph to JSON-compatible dict."""

@@ -9,9 +9,9 @@ from src.DeepONet.dataset import DeepONetDataset
 
 # Config for Resolution
 class InferenceConfig(BaseModel):
-    n_spatial: int = Field(15, description="Grid points per spatial axis")
-    n_time: int = Field(15, description="Grid points for time")
-    save_dir: str = Field("./results", description="Output directory")
+    n_spatial: int = Field(15, title="Grid points per spatial axis")
+    n_time: int = Field(15, title="Grid points for time")
+    save_dir: str = Field("./results", title="Output directory")
 
 @register_node("deeponet_inference")
 class DeepONetInferenceNode(Node):

@@ -1,12 +1,10 @@
-# src/node_system/nodes/solver_nodes.py
-
 import torch
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 
+from src.node_system.configs.training import TrainingConfig
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 from src.DeepONet.training_pipline import DeepONetSolver
-from src.state_management.config import TrainingConfig
 
 @register_node("deeponet_solver")
 class DeepONetSolverNode(Node):
@@ -19,15 +17,15 @@ class DeepONetSolverNode(Node):
     @classmethod
     def get_input_ports(cls) -> Dict[str, Port]:
         return {
-            "model": Port(PortType.MODEL),
-            "problem": Port(PortType.PROBLEM),
-            "training_config": Port(PortType.CONFIG, required=False), # Config needed for optimizer/loss params
+            "model": Port("model", PortType.MODEL),
+            "problem": Port("problem", PortType.PROBLEM),
+            "training_config": Port("training_config", PortType.CONFIG, required=False), 
         }
 
     @classmethod
     def get_output_ports(cls) -> Dict[str, Port]:
         return {
-            "solver": Port(PortType.SOLVER, description="Initialized DeepONetSolver instance")
+            "solver": Port("solver", PortType.SOLVER, description="Initialized DeepONetSolver instance")
         }
 
     @classmethod

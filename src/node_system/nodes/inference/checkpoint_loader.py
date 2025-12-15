@@ -12,15 +12,15 @@ class CheckpointLoaderConfig(BaseModel):
     """Configuration for checkpoint loading behavior."""
     strict_loading: bool = Field(
         default=False, 
-        description="Whether to enforce strict key matching when loading state dict"
+        title="Whether to enforce strict key matching when loading state dict"
     )
     map_location: str = Field(
         default="cpu",
-        description="Device to map tensors to during loading ('cpu', 'cuda', 'cuda:0', etc.)"
+        title="Device to map tensors to during loading ('cpu', 'cuda', 'cuda:0', etc.)"
     )
     strip_prefix: str = Field(
         default="model.",
-        description="Prefix to strip from checkpoint keys (Lightning often adds 'model.' prefix)"
+        title="Prefix to strip from checkpoint keys (Lightning often adds 'model.' prefix)"
     )
 
 

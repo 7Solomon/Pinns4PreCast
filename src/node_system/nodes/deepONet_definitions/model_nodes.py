@@ -2,31 +2,9 @@ import torch.nn as nn
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+from src.node_system.configs.model import CompositeModelConfig
 from src.DeepONet.model_definition import FlexDeepONet 
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
-from src.state_management.config import CompositeModelConfig, ModelConfig
-
-@register_node("model_config")
-class ModelConfigNode(Node):
-    @classmethod
-    def get_input_ports(cls):
-        return []
-
-    @classmethod
-    def get_output_ports(cls):
-        return [Port("config", PortType.CONFIG)]
-
-    @classmethod
-    def get_metadata(cls):
-        return NodeMetadata("Configs", "DeepONet Params", "Layers, activation, fourier", icon="layers")
-
-    @classmethod
-    def get_config_schema(cls):
-        return ModelConfig
-
-    def execute(self):
-        return {"config": self.config}
-
 
 
 @register_node("flex_deeponet")
