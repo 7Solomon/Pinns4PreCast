@@ -6,48 +6,6 @@ from src.node_system.core import Node, Port, PortType, NodeMetadata, register_no
 from src.state_management.config import DatasetConfig, ModelConfig
 
 
-@register_node("model_config")
-class ModelConfigNode(Node):
-    @classmethod
-    def get_input_ports(cls):
-        return []
-
-    @classmethod
-    def get_output_ports(cls):
-        return [Port("config", PortType.CONFIG)]
-
-    @classmethod
-    def get_metadata(cls):
-        return NodeMetadata("Configs", "DeepONet Params", "Layers, activation, fourier", icon="layers")
-
-    @classmethod
-    def get_config_schema(cls):
-        return ModelConfig
-
-    def execute(self):
-        return {"config": self.config}
-
-
-@register_node("dataset_config")
-class DatasetConfigNode(Node):
-    @classmethod
-    def get_input_ports(cls):
-        return [] # Pure data source
-
-    @classmethod
-    def get_output_ports(cls):
-        return [Port("config", PortType.CONFIG)]
-
-    @classmethod
-    def get_metadata(cls):
-        return NodeMetadata("Configs", "Dataset Params", "Sample counts, batch size", icon="list")
-
-    @classmethod
-    def get_config_schema(cls):
-        return DatasetConfig
-
-    def execute(self):
-        return {"config": self.config}
 
 @register_node("concrete_material")
 class ConcreteMaterialNode(Node):

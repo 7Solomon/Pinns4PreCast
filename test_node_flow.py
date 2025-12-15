@@ -1,11 +1,13 @@
 from src.node_system.core import NodeGraph
 
 # --- IMPORT ALL NODES TO REGISTER THEM ---
-import src.node_system.nodes.model_nodes
-import src.node_system.nodes.problem_nodes
-import src.node_system.nodes.data_nodes
-import src.node_system.nodes.training_nodes
-import src.node_system.nodes.parameter_nodes
+import src.node_system.nodes.deepONet_definitions.model_nodes
+import src.node_system.nodes.physics.problem_nodes
+import src.node_system.nodes.data.dataloader_nodes
+import src.node_system.nodes.data.dataset_nodes
+import src.node_system.nodes.deepONet_definitions.solver
+import src.node_system.nodes.training.trainer
+import src.node_system.nodes.physics.parameter_nodes
 
 def test_full_pipeline():
     graph = NodeGraph()
@@ -54,7 +56,9 @@ def test_full_pipeline():
     
     # Solver (Logic)
     # Pass {} to use internal defaults (Adam, 1e-4)
-    solver_node = graph.add_node("deeponet_solver", "trainer", {})
+    solver_node = graph.add_node("deeponet_solver", "solver", {})
+    
+    trainer_node = graph.add_node("lightning_trainer", {})
     
     print("--- 2. Connecting Graph ---")
     
@@ -66,11 +70,9 @@ def test_full_pipeline():
     graph.connect("mat", "material", "data", "material")
     graph.connect("dom", "domain",   "data", "domain")
     graph.connect("data", "dataset", "loader", "dataset")
-    graph.connect("net",  "model_instance",   "trainer", "model")
-    graph.connect("pde",  "problem_instance", "trainer", "problem")
+    graph.connect("net",  "model_instance",   "solver", "model")
+    graph.connect("pde",  "problem_instance", "solver", "problem")
     
-    # --- CHANGE THIS: Connect Loader -> Trainer ---
-    # Was: graph.connect("data", "dataloader", ...) -> WRONG (data outputs dataset)
     graph.connect("loader", "dataloader", "trainer", "dataloader") 
     
     # Optional: Connect Training Config

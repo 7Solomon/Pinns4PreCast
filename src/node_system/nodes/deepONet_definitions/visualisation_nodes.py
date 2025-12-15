@@ -22,8 +22,7 @@ class VisualizationCallbackNode(Node):
 
     @classmethod
     def get_output_ports(cls):
-        # We define a new PortType for Callbacks
-        return [Port("callback", "callback")] 
+        return [Port("callback", PortType.CALLBACK)] 
 
     @classmethod
     def get_metadata(cls):
@@ -82,8 +81,6 @@ class VisualizationCallback(Callback):
         pl_module.eval()
 
         with torch.no_grad():
-            # 1. Create a mini-dataset for visualization
-            # Note: We use the params passed in __init__, not State()
             ds = DeepONetDataset(
                 problem=pl_module.problem,
                 domain=self.domain,

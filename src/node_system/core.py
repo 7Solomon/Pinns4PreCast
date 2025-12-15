@@ -9,6 +9,8 @@ This provides:
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
+import json
 from typing import Any, Dict, List, Optional, Type, Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -25,8 +27,7 @@ class PortType(str, Enum):
     SOLVER = "solver"
     OPTIMIZER = "optimizer"
     SCHEDULER = "scheduler"
-    LOSS_WEIGHTS = "loss_weights"
-
+    CALLBACK = 'callback'
     CONFIG = "config"
     MATERIAL = "material"
     DOMAIN = "domain"
@@ -47,7 +48,6 @@ class Port:
         """Check if value matches port type (simplified)."""
         if self.port_type == PortType.ANY:
             return True
-        # Add more sophisticated type checking as needed
         return True
 
 
@@ -296,6 +296,51 @@ class NodeGraph:
             return self.nodes[output_node].get_output(output_port)
         
         return None
+    
+    def save_to_file(self, filepath: str, metadata: dict = None):
+        """
+        Save graph to JSON file.
+        
+        Args:
+            filepath: Path to save graph.json
+            metadata: Optional metadata dict (description, author, tags)
+        """
+        graph_dict = self.to_dict()
+        
+        # Add metadata
+        graph_dict["version"] = "1.0"
+        graph_dict["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if metadata:
+            graph_dict["metadata"] = metadata
+        
+        with open(filepath, 'w') as f:
+            json.dump(graph_dict, f, indent=2)
+
+    @classmethod
+    def load_from_file(cls, filepath: str) -> 'NodeGraph':
+        """Load graph from JSON file."""
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        
+        version = data.get("version", "1.0")
+        if version != "1.0":
+            raise ValueError(f"Unsupported graph version: {version}")
+        
+        return cls.from_dict(data)
+
+def get_config_snapshot(self) -> dict:
+    """
+    Get fully resolved configuration for all nodes.
+    Useful for reproducing exact settings later.
+    """
+    snapshot = {}
+    for node_id, node in self.nodes.items():
+        snapshot[node_id] = {
+            "type": node.__class__.__name__,
+            "config_class": node.get_config_schema().__name__ if node.get_config_schema() else None,
+            "config": node.config.dict() if hasattr(node, 'config') and node.config else {}
+        }
+    return snapshot
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize graph to JSON-compatible dict."""
