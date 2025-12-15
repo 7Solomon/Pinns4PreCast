@@ -1,7 +1,6 @@
 
+from src.node_system.nodes.data.function_definitions import DeepONetDataset
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
-
-from src.DeepONet.dataset import DeepONetDataset 
 from src.node_system.configs.dataset import CompositeDatasetConfig
 
 @register_node("deeponet_dataset")
@@ -12,8 +11,7 @@ class DeepONetDatasetNode(Node):
             Port("problem", PortType.PROBLEM),
             Port("domain", PortType.DOMAIN),
             Port("material", PortType.MATERIAL),
-            Port("input_config", PortType.CONFIG, required=False),
-            Port("dataset_config", PortType.CONFIG, required=False) # Now just generation params
+            Port("composite_dataset_config", PortType.CONFIG, required=False)
         ]
 
     @classmethod
@@ -38,24 +36,19 @@ class DeepONetDatasetNode(Node):
         problem = self.inputs["problem"]
         domain = self.inputs["domain"]
         material = self.inputs["material"]
-        problem = self.inputs["problem"]
         
-        i_cfg = self.inputs.get("input_config")
-        d_cfg = self.inputs.get("dataset_config")
+        cfg = self.inputs.get("composite_dataset_config") or self.config
         
-        if not i_cfg: i_cfg = self.config.input_config
-        if not d_cfg: d_cfg = self.config.data_config
-
         dataset = DeepONetDataset(
             problem=problem,
             domain=domain,
             material=material,
-            n_pde=d_cfg.n_pde,
-            n_ic=d_cfg.n_ic,
-            n_bc_face=d_cfg.n_bc_face,
-            num_samples=d_cfg.num_samples,
-            num_sensors_bc=i_cfg.num_sensors_bc, 
-            num_sensors_ic=i_cfg.num_sensors_ic
+            n_pde=cfg.data_config.n_pde,
+            n_ic=cfg.data_config.n_ic,
+            n_bc_face=cfg.data_config.n_bc_face,
+            num_samples=cfg.data_config.num_samples,
+            num_sensors_bc=cfg.input_config.num_sensors_bc, 
+            num_sensors_ic=cfg.input_config.num_sensors_ic
         )
         
         return {"dataset": dataset}
