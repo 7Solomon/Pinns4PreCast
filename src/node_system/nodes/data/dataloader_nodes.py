@@ -1,10 +1,10 @@
 from pydantic import BaseModel, Field
 from torch.utils.data import DataLoader
 
+from src.node_system.configs.dataloader import DataLoaderConfig
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 
 from src.DeepONet.dataset import deeponet_collate_fn 
-from src.state_management.config import DataLoaderConfig
 
 
 @register_node("deeponet_dataloader")

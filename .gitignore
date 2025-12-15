@@ -2,7 +2,23 @@
 *__pycache__/
 content/
 content_depr/
+node_modules/
+package-lock.json
 
 .vscode/
-
 .current_state.json
+
+
+
+# --- FRONTEND  ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/coverage/
+frontend/.ds_store
+frontend/*.pem
+frontend/.env*
+frontend/.vercel
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts

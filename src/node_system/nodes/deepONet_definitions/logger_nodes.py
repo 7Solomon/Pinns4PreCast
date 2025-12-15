@@ -42,14 +42,14 @@ class DashboardLoggerNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("graph", PortType.ANY, required=False, description="NodeGraph instance to save")
+            Port("graph", PortType.ANY, required=False, title="NodeGraph instance to save")
         ]
 
     @classmethod
     def get_output_ports(cls):
         return [
-            Port("logger", "logger"),
-            Port("run_path", PortType.CONFIG, description="Path to run directory")
+            Port("logger", PortType.LOGGER),
+            Port("run_path", PortType.CONFIG, title="Path to run directory")
         ]
 
     @classmethod

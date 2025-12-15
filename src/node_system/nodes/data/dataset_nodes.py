@@ -2,7 +2,7 @@
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 
 from src.DeepONet.dataset import DeepONetDataset 
-from src.state_management.config import CompositeDatasetConfig
+from src.node_system.configs.dataset import CompositeDatasetConfig
 
 @register_node("deeponet_dataset")
 class DeepONetDatasetNode(Node):
