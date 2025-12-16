@@ -2,11 +2,11 @@
 
 import dynamic from 'next/dynamic';
 
-const Editor = dynamic(() => import('@/components/Editor'), {
+const Editor = dynamic(() => import('@/components/FlowEditor'), {
   ssr: false,
   loading: () => (
     <div className="w-full h-screen flex items-center justify-center bg-slate-950 text-white">
-      Loading Editor...
+      Loading DeepONet Studio...
     </div>
   )
 });

@@ -2,10 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body {
+body,
+html {
+  margin: 0;
+  padding: 0;
   height: 100%;
-  background: #020617;
-  /* Matches Slate 950 */
-  color: white;
+  width: 100%;
+  overflow: hidden;
 }

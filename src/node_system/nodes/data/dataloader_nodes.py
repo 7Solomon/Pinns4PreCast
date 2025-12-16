@@ -13,7 +13,7 @@ class DeepONetDataLoaderNode(Node):
     def get_input_ports(cls):
         return [
             Port("dataset", PortType.DATASET),
-            Port("config", PortType.CONFIG, required=False) # Optional external DataLoaderConfig
+            Port("data_loadere_config", PortType.CONFIG, required=False) # Optional external DataLoaderConfig
         ]
 
     @classmethod

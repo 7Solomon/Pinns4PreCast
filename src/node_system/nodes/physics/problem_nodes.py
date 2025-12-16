@@ -114,7 +114,7 @@ class HeatPDENode(Node):
 
     @classmethod
     def get_output_ports(cls):
-        return [Port("problem_instance", PortType.PROBLEM)]
+        return [Port("problem", PortType.PROBLEM)]
 
     @classmethod
     def get_metadata(cls):
@@ -137,4 +137,4 @@ class HeatPDENode(Node):
         # 2. Instantiate Problem directly (Dependency Injection)
         problem = HeatODE(material=material_obj, domain=domain_obj)
         
-        return {"problem_instance": problem}
+        return {"problem": problem}
