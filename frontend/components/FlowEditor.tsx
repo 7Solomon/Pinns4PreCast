@@ -75,14 +75,14 @@ export default function FlowEditor() {
                 {/* --- CONTROL PANEL OVERLAY --- */}
                 <div className="absolute top-4 right-4 z-50 flex gap-3 pointer-events-auto">
                     <button
-                        onClick={() => { console.log("SAVE"); setShowSaveDialog(true) }}
+                        onClick={() => { setShowLoadDialog(false); setShowSaveDialog(true) }}
                         className="flex gap-2 items-center bg-slate-800 text-slate-200 px-4 py-2 rounded-lg border border-slate-700 shadow-xl hover:bg-slate-700 transition-all hover:scale-105"
                     >
                         <Save size={16} /> Save
                     </button>
 
                     <button
-                        onClick={() => { console.log("LOAD"); setShowLoadDialog(true) }}
+                        onClick={() => { setShowSaveDialog(false); setShowLoadDialog(true) }}
                         className="flex gap-2 items-center bg-slate-800 text-slate-200 px-4 py-2 rounded-lg border border-slate-700 shadow-xl hover:bg-slate-700 transition-all hover:scale-105"
                     >
                         <FolderOpen size={16} /> Load
@@ -102,10 +102,8 @@ export default function FlowEditor() {
                     </button>
                 </div>
             </div>
-
-
             {showSaveDialog && (
-                < SaveDialog
+                <SaveDialog
                     isOpen={showSaveDialog}
                     onClose={() => setShowSaveDialog(false)}
                     onSave={handleSaveSubmit}
