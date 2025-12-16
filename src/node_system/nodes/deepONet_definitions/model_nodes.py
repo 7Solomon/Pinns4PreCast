@@ -18,7 +18,7 @@ class FlexDeepONetNode(Node):
 
     @classmethod
     def get_output_ports(cls):
-        return [Port("model_instance", PortType.MODEL)]
+        return [Port("model", PortType.MODEL)]
 
     @classmethod
     def get_metadata(cls):
@@ -94,6 +94,6 @@ class FlexDeepONetNode(Node):
             fourier_features=fourier_args
         )
 
-        return {"model_instance": model}
+        return {"model": model}
 
 

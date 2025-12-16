@@ -26,9 +26,7 @@ def test_full_pipeline():
     graph.add_node("deeponet_dataset", "data", {})
     graph.add_node("deeponet_dataloader", "loader", {"batch_size": 4}) # Small batch for testing
     graph.add_node("flex_deeponet", "net", {})
-    graph.add_node("deeponet_solver", "solver", {})
-    
-    # Set max_epochs=1 for testing so we don't wait forever
+    graph.add_node("deeponet_solver", "solver", {})    
     graph.add_node("lightning_trainer", "trainer", {"max_epochs": 1, "accelerator": "cpu"})
 
     # --- 2. CONNECT (FIXED) ---
