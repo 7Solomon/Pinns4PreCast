@@ -146,8 +146,8 @@ export const useFlowEditor = () => {
             }
 
             let nodeType = 'custom';
-            if (n.type === 'live_training_monitor') {
-                nodeType = 'monitor';
+            if (n.type === 'loss_curve') {
+                nodeType = 'loss_curve';
             }
 
             return {

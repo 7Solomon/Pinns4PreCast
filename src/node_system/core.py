@@ -36,6 +36,7 @@ class PortType(str, Enum):
     ANY = "any"
 
     RUN_ID = "run_id"  # maybe?
+    SPEC = "spec"
 
 
 @dataclass

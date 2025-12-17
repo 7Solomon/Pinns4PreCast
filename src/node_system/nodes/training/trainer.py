@@ -19,7 +19,6 @@ class LightningTrainerNode(Node):
             "val_dataloader": Port("val_dataloader", PortType.DATALOADER, required=False, description="Validation DataLoader"),
             
             "callbacks": Port("callbacks", PortType.CALLBACK, required=False),
-            
             "logger": Port("logger", PortType.LOGGER, required=False),
             
             "training_config": Port("training_config", PortType.CONFIG, required=False)
@@ -50,9 +49,8 @@ class LightningTrainerNode(Node):
         train_loader = self.inputs["dataloader"]
         val_loader = self.inputs.get("val_dataloader")
         
-        t_cfg = self.inputs.get("training_config")
-        if not t_cfg:
-            t_cfg = self.config
+        t_cfg = self.inputs.get("training_config") or self.config
+ 
 
         # Handle Callbacks
         callbacks_input = self.inputs.get("callbacks")
@@ -63,13 +61,13 @@ class LightningTrainerNode(Node):
             else:
                 callbacks_list.append(callbacks_input)
 
-        logger = self.inputs.get("logger")
+        logger = self.inputs.get("logger") or False
 
         # Create Trainer
         trainer = pl.Trainer(
             max_epochs=t_cfg.max_epochs,
             callbacks=callbacks_list,
-            logger=logger if logger else False,
+            logger=logger,
             accelerator=t_cfg.accelerator,
             enable_checkpointing=bool(callbacks_list), 
         )

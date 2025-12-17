@@ -9,8 +9,8 @@ class DeepONetDatasetNode(Node):
     def get_input_ports(cls):
         return [
             Port("problem", PortType.PROBLEM),
-            Port("domain", PortType.DOMAIN),
             Port("material", PortType.MATERIAL),
+            Port("domain", PortType.DOMAIN),
             Port("composite_dataset_config", PortType.CONFIG, required=False)
         ]
 

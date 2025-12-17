@@ -8,12 +8,12 @@ import { LoadDialog } from './graph_management/LoadDialog';
 import Sidebar from './Sidebar';
 import FlowCanvas from './FlowCanvas';
 import { useFlowEditor } from '@/hooks/useFlowEditor';
-import MonitorNode from './nodes/MonitorNode';
 import CustomNode from './nodes/CustomNode';
+import LossCurveNode from './nodes/LossCurveNode';
 
 const nodeTypes = {
     custom: CustomNode,
-    monitor: MonitorNode
+    loss_curve: LossCurveNode
 };
 
 export default function FlowEditor() {
