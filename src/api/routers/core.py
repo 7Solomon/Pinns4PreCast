@@ -39,7 +39,7 @@ async def execute_graph(payload: GraphExecutionPayload):
     print(f"Received execution request for target: {payload.target_node_id}")
     try:
         graph = NodeGraph()
-        
+        # Build graph
         for n in payload.nodes:
             try:
                 graph.add_node(node_type=n.type, node_id=n.id, config=n.config)
@@ -53,13 +53,33 @@ async def execute_graph(payload: GraphExecutionPayload):
             except ValueError as e:
                 print(f"Warning: Connection failed: {e}")
 
+        print(graph.to_dict())
         result = graph.execute(output_node=payload.target_node_id)
         
+        run_id = None
+        widget_specs = []
+        
+        for node_id, node in graph.nodes.items():
+            if hasattr(node, 'outputs') and 'run_id' in node.outputs:
+                run_id = node.outputs['run_id']
+            
+            if hasattr(node, 'outputs') and 'widget_spec' in node.outputs:
+                widget_specs.append(node.outputs['widget_spec'])
+        
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Graph executed successfully",
+            "run_id": run_id,
+            "widgets": widget_specs,
             "result_summary": str(result)
         }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
     except Exception as e:
         import traceback

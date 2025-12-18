@@ -34,6 +34,7 @@ class DeepONetDatasetNode(Node):
 
     def execute(self):
         problem = self.inputs["problem"]
+        print(problem)
         domain = self.inputs["domain"]
         material = self.inputs["material"]
         

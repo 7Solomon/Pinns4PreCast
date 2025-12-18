@@ -23,7 +23,7 @@ const PortColors: Record<string, string> = {
   "default": "bg-slate-400 border-slate-400"
 };
 
-export interface NodeData {
+export interface NodeData { 
   label: string;
   category: string;
   icon?: string;

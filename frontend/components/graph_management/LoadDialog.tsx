@@ -253,7 +253,7 @@ export function LoadDialog({ isOpen, onClose, onLoad }: LoadDialogProps) {
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => onLoad(graph.filename)}
                                             className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"

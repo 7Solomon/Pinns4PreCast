@@ -66,6 +66,7 @@ export const useFlowEditor = () => {
 
     // --- API ACTIONS ---
 
+
     const runSimulation = async () => {
         setIsRunning(true);
         const payload = {
@@ -83,10 +84,37 @@ export const useFlowEditor = () => {
             })),
             target_node_id: nodes.find(n => (n.data as any).category === 'Training')?.id || "unknown"
         };
+        console.log("payload")
+        console.log(payload)
 
         try {
             const res = await axios.post('http://localhost:8000/execute', payload);
-            alert(`Success: ${res.data.message}`);
+
+            // Extract run_id from response
+            const runId = res.data.run_id;
+            const widgets = res.data.widgets || [];
+
+            // Update visualization nodes with the run_id
+            if (runId) {
+                setNodes(nds => nds.map(node => {
+                    // Find loss_curve nodes and inject the run_id
+                    if ((node.data as any).type === 'loss_curve') {
+                        return {
+                            ...node,
+                            data: {
+                                ...node.data,
+                                config: {
+                                    ...(node.data.config || {}),
+                                    run_id: runId
+                                }
+                            }
+                        };
+                    }
+                    return node;
+                }));
+            }
+
+            alert(`Success: ${res.data.message}\nRun ID: ${runId}`);
         } catch (e: any) {
             alert(`Error: ${e.response?.data?.detail || e.message}`);
         } finally {
@@ -122,7 +150,7 @@ export const useFlowEditor = () => {
         // Clear current graph
         setNodes([]);
         setEdges([]);
-
+        console.log(graphData)
         // Load nodes with validation against registry
         const loadedNodes = graphData.nodes.map((n: any) => {
             const nodeDef = registry[n.type];

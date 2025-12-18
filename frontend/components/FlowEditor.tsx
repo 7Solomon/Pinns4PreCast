@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Play, Save, FolderOpen } from 'lucide-react'; // Import icons here now
+import { Play, Save, FolderOpen } from 'lucide-react';
 import { SaveDialog } from './graph_management/SaveDialog';
 import { LoadDialog } from './graph_management/LoadDialog';
 import Sidebar from './Sidebar';
