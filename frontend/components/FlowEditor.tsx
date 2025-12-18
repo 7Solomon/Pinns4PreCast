@@ -20,11 +20,13 @@ export default function FlowEditor() {
     const {
         nodes, edges, registry, isRunning,
         onNodesChange, onEdgesChange, onConnect,
-        addNode, clearGraph, runSimulation, saveGraph, loadGraph
+        addNode, clearGraph, runSimulation, stopSimulation, saveGraph, loadGraph
     } = useFlowEditor();
 
     const [showSaveDialog, setShowSaveDialog] = useState(false);
     const [showLoadDialog, setShowLoadDialog] = useState(false);
+
+
 
     const handleSaveSubmit = async (name: string, description: string, tags: string[], overwrite: boolean) => {
         try {
@@ -88,18 +90,16 @@ export default function FlowEditor() {
                         <FolderOpen size={16} /> Load
                     </button>
 
-                    <button
-                        onClick={runSimulation}
-                        disabled={isRunning}
-                        className="flex gap-2 items-center bg-emerald-600 text-white px-6 py-2 rounded-lg shadow-xl hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105"
-                    >
-                        {isRunning ? (
-                            <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
-                        ) : (
-                            <Play size={18} fill="currentColor" />
-                        )}
-                        Run Training
-                    </button>
+
+                    {!isRunning ? (
+                        <button onClick={runSimulation} className="btn-green">
+                            Run Training
+                        </button>
+                    ) : (
+                        <button onClick={stopSimulation} className="btn-red animate-pulse">
+                            Stop Training
+                        </button>
+                    )}
                 </div>
             </div>
             {showSaveDialog && (

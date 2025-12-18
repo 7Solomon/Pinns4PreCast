@@ -7,54 +7,52 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from lightning.pytorch.loggers import Logger
 from lightning.pytorch.utilities import rank_zero_only
+from src.node_system.configs.logger import LoggerConfig
 from src.node_system.core import Node, NodeMetadata, Port, PortType, register_node
 
 
 
-def get_new_run(save_dir: str, status_file_name: str = "status.json") -> str:
-    """Generates a timestamp ID and initializes the run directory."""
-    now = datetime.now()
-    timestamp_id = now.strftime("%Y-%m-%d_%H-%M-%S")
-    pretty_date = now.strftime("%Y-%m-%d %H:%M:%S")
+#def get_new_run(save_dir: str, status_file_name: str = "status.json") -> str:
+#    """Generates a timestamp ID and initializes the run directory."""
+#    now = 
+#    timestamp_id = 
+#    pretty_date = now.strftime("%Y-%m-%d %H:%M:%S")
+#
+#    run_path = os.path.join(save_dir, timestamp_id)
+#
+#    os.makedirs(run_path, exist_ok=True)
+#    #os.makedirs(os.path.join(run_path, 'checkpoints'), exist_ok=True)
+#    #os.makedirs(os.path.join(run_path, 'vtk'), exist_ok=True)
+#
+#    # 2. Initialize Metadata
+#    initial_status = {
+#        "id": timestamp_id,
+#        "status": "initializing",
+#        "start_time": pretty_date,
+#        "epoch": 0,
+#        "loss": None
+#    }
+#        
+#    with open(os.path.join(run_path, status_file_name), 'w') as f:
+#        json.dump(initial_status, f, indent=4)
+#
+#    return timestamp_id
 
-    run_path = os.path.join(save_dir, timestamp_id)
 
-    os.makedirs(run_path, exist_ok=True)
-    #os.makedirs(os.path.join(run_path, 'checkpoints'), exist_ok=True)
-    #os.makedirs(os.path.join(run_path, 'vtk'), exist_ok=True)
-
-    # 2. Initialize Metadata
-    initial_status = {
-        "id": timestamp_id,
-        "status": "initializing",
-        "start_time": pretty_date,
-        "epoch": 0,
-        "loss": None
-    }
-        
-    with open(os.path.join(run_path, status_file_name), 'w') as f:
-        json.dump(initial_status, f, indent=4)
-
-    return timestamp_id
-
-class LoggerConfig(BaseModel):
-    save_dir: str = Field(default="content/runs", title="Runs Directory")
-    version: Optional[str] = Field(default=None, title="Run Name (auto-generate if empty)")
-    save_graph: bool = Field(default=True, title="Save graph.json to run directory")
 
 @register_node("dashboard_logger")
 class DashboardLoggerNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("graph", PortType.ANY, required=False, description="NodeGraph instance to save")
+            #Port("graph", PortType.ANY, description="NodeGraph instance to save"),
+
         ]
 
     @classmethod
     def get_output_ports(cls):
         return [
             Port("logger", PortType.LOGGER),
-            Port("run_id", PortType.RUN_ID, description="Unique run identifier for monitoring")
         ]
     
     @classmethod
@@ -75,7 +73,7 @@ class DashboardLoggerNode(Node):
         cfg = self.config
         
         # 1. Create/Get Run Directory
-        version_name = cfg.version or get_new_run(cfg.save_dir)
+        version_name = self.context.get("run_id")
         
         run_path = os.path.join(cfg.save_dir, version_name)
         
@@ -100,7 +98,6 @@ class DashboardLoggerNode(Node):
         
         return {
             "logger": logger,
-            "run_id": version_name
         }
 
 class DashboardLogger(Logger):

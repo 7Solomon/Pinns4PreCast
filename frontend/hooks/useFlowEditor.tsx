@@ -14,7 +14,10 @@ export const useFlowEditor = () => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [registry, setRegistry] = useState<Record<string, NodeData>>({});
+
+    // States for Execution Control
     const [isRunning, setIsRunning] = useState(false);
+    const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
     // Load Registry
     useEffect(() => {
@@ -69,6 +72,8 @@ export const useFlowEditor = () => {
 
     const runSimulation = async () => {
         setIsRunning(true);
+        setCurrentRunId(null); // Reset previous run
+
         const payload = {
             nodes: nodes.map(n => ({
                 id: n.id,
@@ -84,29 +89,23 @@ export const useFlowEditor = () => {
             })),
             target_node_id: nodes.find(n => (n.data as any).category === 'Training')?.id || "unknown"
         };
-        console.log("payload")
-        console.log(payload)
 
         try {
             const res = await axios.post('http://localhost:8000/execute', payload);
 
-            // Extract run_id from response
             const runId = res.data.run_id;
-            const widgets = res.data.widgets || [];
 
-            // Update visualization nodes with the run_id
             if (runId) {
+                setCurrentRunId(runId); // Store ID so we can stop it later
+
+                // Update visualization nodes
                 setNodes(nds => nds.map(node => {
-                    // Find loss_curve nodes and inject the run_id
                     if ((node.data as any).type === 'loss_curve') {
                         return {
                             ...node,
                             data: {
                                 ...node.data,
-                                config: {
-                                    ...(node.data.config || {}),
-                                    run_id: runId
-                                }
+                                config: { ...(node.data.config || {}), run_id: runId }
                             }
                         };
                     }
@@ -114,11 +113,46 @@ export const useFlowEditor = () => {
                 }));
             }
 
-            alert(`Success: ${res.data.message}\nRun ID: ${runId}`);
+            // Don't alert success yet, just log it. 
+            // The training is running in background.
+            console.log(`Started Run ID: ${runId}`);
+
         } catch (e: any) {
             alert(`Error: ${e.response?.data?.detail || e.message}`);
-        } finally {
             setIsRunning(false);
+        }
+    };
+
+    const stopSimulation = async () => {
+        if (!currentRunId) return;
+
+        try {
+            await axios.post(`http://localhost:8000/execute/stop/${currentRunId}`);
+            alert("Training stopping... (It may take a few seconds to finish the current epoch)");
+            setIsRunning(false); // Enable buttons immediately
+        } catch (e) {
+            console.error("Failed to stop:", e);
+        }
+    };
+
+    const updateLossCurve = async (runId: string) => {
+        if (runId) {
+            setNodes(nds => nds.map(node => {
+                // Find loss_curve nodes and inject the run_id
+                if ((node.data as any).type === 'loss_curve') {
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            config: {
+                                ...(node.data.config || {}),
+                                run_id: runId
+                            }
+                        }
+                    };
+                }
+                return node;
+            }));
         }
     };
 
@@ -209,6 +243,7 @@ export const useFlowEditor = () => {
         addNode,
         clearGraph,
         runSimulation,
+        stopSimulation,
         saveGraph,
         loadGraph,
         setNodes, // exposed in case you need direct access
