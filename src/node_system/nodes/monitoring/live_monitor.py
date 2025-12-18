@@ -79,8 +79,8 @@ class LiveTrainingMonitorNode(Node):
         monitor_info = {
             "run_id": run_id,
             "run_path": run_path,
-            "status_file": os.path.join(run_path, "status.json"),
-            "metrics_file": os.path.join(run_path, "metrics.csv"),
+            "status_file": os.path.join(run_path, getattr(config, "status_file_name", "status.json")),
+            "metrics_file": os.path.join(run_path, getattr(config, "metric_file_name", "metrics.csv")), 
             "update_interval": config.update_interval,
             "show_metrics": config.show_metrics
         }

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from src.node_system.session import stop_session
 from src.node_system.core import NodeGraph, NodeRegistry
 from src.api.models import GraphExecutionPayload
 from src.api.utils import port_to_dict, get_config_schema_json
@@ -35,11 +37,21 @@ def get_node_registry():
     return registry_data
 
 @router.post("/execute")
-async def execute_graph(payload: GraphExecutionPayload):
-    print(f"Received execution request for target: {payload.target_node_id}")
+async def execute_graph(payload: GraphExecutionPayload, background_tasks: BackgroundTasks):
+    print(f"Received execution request...")
+    
     try:
+        run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        print(f"Assigning Run ID: {run_id}")
+
+        global_context = {
+            "run_id": run_id,
+            #"user": "imb-user-johannes"
+        }
+
+        # BUILD GRAPH
         graph = NodeGraph()
-        # Build graph
+        
         for n in payload.nodes:
             try:
                 graph.add_node(node_type=n.type, node_id=n.id, config=n.config)
@@ -53,25 +65,19 @@ async def execute_graph(payload: GraphExecutionPayload):
             except ValueError as e:
                 print(f"Warning: Connection failed: {e}")
 
-        print(graph.to_dict())
-        result = graph.execute(output_node=payload.target_node_id)
-        
-        run_id = None
-        widget_specs = []
-        
-        for node_id, node in graph.nodes.items():
-            if hasattr(node, 'outputs') and 'run_id' in node.outputs:
-                run_id = node.outputs['run_id']
-            
-            if hasattr(node, 'outputs') and 'widget_spec' in node.outputs:
-                widget_specs.append(node.outputs['widget_spec'])
-        
+        # FIRE AND FORGET
+        background_tasks.add_task(
+            graph.execute, 
+            output_node=payload.target_node_id, 
+            context=global_context
+        )
+
+        # RETURN ID IMMEDIATELY
         return {
-            "status": "success",
-            "message": "Graph executed successfully",
-            "run_id": run_id,
-            "widgets": widget_specs,
-            "result_summary": str(result)
+            "status": "started",
+            "message": "Graph started in background",
+            "run_id": run_id, # <--- Frontend gets it here!
+            "widgets": []
         }
 
     except Exception as e:
@@ -81,7 +87,10 @@ async def execute_graph(payload: GraphExecutionPayload):
 
 
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/execute/stop/{run_id}")
+def stop_execution(run_id: str):
+    success = stop_session(run_id)
+    if success:
+        return {"message": f"Stop signal sent to run {run_id}"}
+    else:
+        return {"message": "Run not found or already finished", "warning": True}

@@ -1,6 +1,7 @@
 import lightning.pytorch as pl
 from typing import Dict, Any, List
 
+from src.node_system.session import register_session, unregister_session
 from src.node_system.configs.training import TrainingConfig
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 
@@ -50,7 +51,7 @@ class LightningTrainerNode(Node):
         val_loader = self.inputs.get("val_dataloader")
         
         t_cfg = self.inputs.get("training_config") or self.config
- 
+        run_id = self.context.get("run_id")
 
         # Handle Callbacks
         callbacks_input = self.inputs.get("callbacks")
@@ -72,14 +73,18 @@ class LightningTrainerNode(Node):
             enable_checkpointing=bool(callbacks_list), 
         )
 
+        register_session(run_id, trainer)
+
         print(f"[Trainer] Starting fit for {t_cfg.max_epochs} epochs...")
-        
-        # Execute Training
-        trainer.fit(
-            model=solver,
-            train_dataloaders=train_loader,
-            val_dataloaders=val_loader
-        )
+        try:
+            # Execute Training
+            trainer.fit(
+                model=solver,
+                train_dataloaders=train_loader,
+                val_dataloaders=val_loader
+            )
+        finally:
+            unregister_session(run_id)
 
         # Retrieve best checkpoint if available
         best_path = ""

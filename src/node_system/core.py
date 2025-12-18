@@ -79,7 +79,9 @@ class Node(ABC):
         self.node_id = node_id
         self.inputs: Dict[str, Any] = {}
         self.outputs: Dict[str, Any] = {}
+        self.context: Dict[str, Any] = {} 
         self._executed = False
+
     
     @classmethod
     @abstractmethod
@@ -271,7 +273,7 @@ class NodeGraph:
         
         return order
     
-    def execute(self, output_node: str = None, output_port: str = None) -> Any:
+    def execute(self, output_node: str = None, output_port: str = None, context: Dict[str, Any] = None) -> Any:
         """
         Execute the graph.
         
@@ -284,6 +286,10 @@ class NodeGraph:
         # Execute each node in order
         for node_id in execution_order:
             node = self.nodes[node_id]
+
+            # Global context
+            if context:
+                node.context = context
             
             # Set inputs from connections
             for conn in self.connections:
