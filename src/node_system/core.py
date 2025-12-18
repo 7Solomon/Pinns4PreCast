@@ -342,7 +342,7 @@ class NodeGraph:
             snapshot[node_id] = {
                 "type": node.__class__.__name__,
                 "config_class": node.get_config_schema().__name__ if node.get_config_schema() else None,
-                "config": node.config.dict() if hasattr(node, 'config') and node.config else {}
+                "config": node.config.model_dump() if hasattr(node, 'config') and node.config else {}
             }
         return snapshot
     
@@ -353,7 +353,7 @@ class NodeGraph:
                 {
                     "id": node_id,
                     "type": node.__class__.__name__,
-                    "config": node.config.dict() if hasattr(node, 'config') and node.config else {}
+                    "config": node.config.model_dump() if hasattr(node, 'config') and node.config else {}
                 }
                 for node_id, node in self.nodes.items()
             ],

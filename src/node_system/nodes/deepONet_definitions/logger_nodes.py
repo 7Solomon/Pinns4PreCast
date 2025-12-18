@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from lightning.pytorch.loggers import Logger
 from lightning.pytorch.utilities import rank_zero_only
-from src.node_system.core import Node, Port, PortType, register_node
+from src.node_system.core import Node, NodeMetadata, Port, PortType, register_node
 
 
 
@@ -39,7 +39,7 @@ def get_new_run(save_dir: str, status_file_name: str = "status.json") -> str:
 
 class LoggerConfig(BaseModel):
     save_dir: str = Field(default="content/runs", title="Runs Directory")
-    version: str | None = Field(default=None, title="Run Name (auto-generate if empty)")
+    version: Optional[str] = Field(default=None, title="Run Name (auto-generate if empty)")
     save_graph: bool = Field(default=True, title="Save graph.json to run directory")
 
 @register_node("dashboard_logger")
@@ -47,28 +47,35 @@ class DashboardLoggerNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("graph", PortType.GRAPH, title="NodeGraph instance to save"),
-            Port("logger_config", PortType.CONFIG, required=False, title="NodeGraph instance to save")
+            Port("graph", PortType.ANY, required=False, description="NodeGraph instance to save")
         ]
 
     @classmethod
     def get_output_ports(cls):
         return [
             Port("logger", PortType.LOGGER),
-            Port("run_id", PortType.RUN_ID, title="Id of the run")
+            Port("run_id", PortType.RUN_ID, description="Unique run identifier for monitoring")
         ]
+    
+    @classmethod
+    def get_metadata(cls):
+        return NodeMetadata(
+            category="Logger",
+            display_name="Dashboard Logger",
+            description="This crestaes the run ID",
+            icon="network-wired"
+        )
+
 
     @classmethod
     def get_config_schema(cls):
         return LoggerConfig
 
     def execute(self):
-        cfg = self.inputs.get("logger_config") or self.config
+        cfg = self.config
         
         # 1. Create/Get Run Directory
-        version_name = cfg.version
-        if not version_name:
-            version_name = get_new_run(cfg.save_dir)
+        version_name = cfg.version or get_new_run(cfg.save_dir)
         
         run_path = os.path.join(cfg.save_dir, version_name)
         
@@ -79,13 +86,11 @@ class DashboardLoggerNode(Node):
                 graph_path = os.path.join(run_path, "graph.json")
                 config_path = os.path.join(run_path, "graph_config.json")
                 
-                # Save structure
                 graph.save_to_file(graph_path, metadata={
                     "run_id": version_name,
                     "purpose": "training"
                 })
                 
-                # Save resolved configs
                 config_snapshot = graph.get_config_snapshot()
                 with open(config_path, 'w') as f:
                     json.dump(config_snapshot, f, indent=2)
@@ -97,8 +102,6 @@ class DashboardLoggerNode(Node):
             "logger": logger,
             "run_id": version_name
         }
-    
-
 
 class DashboardLogger(Logger):
     """"
