@@ -33,7 +33,7 @@ def get_node_registry():
             "color": meta.color,
             "icon": meta.icon
         })
-        
+
     return registry_data
 
 @router.post("/execute")

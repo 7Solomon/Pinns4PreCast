@@ -184,7 +184,7 @@ class NodeRegistry:
             node_type: node_cls.get_metadata()
             for node_type, node_cls in cls._nodes.items()
         }
-    
+
     @classmethod
     def load_plugin(cls, module_path: str):
         """

@@ -10,6 +10,8 @@ import {
 import axios from 'axios';
 import { NodeData } from '@/components/nodes/CustomNode';
 
+const configList = ['dataloader_config', 'input_config', 'dataset_gen_config', 'composite_dataset_gen_config', 'training_config', 'model_config', 'composite_model_config']
+
 export const useFlowEditor = () => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -38,10 +40,12 @@ export const useFlowEditor = () => {
     const addNode = useCallback((type: string) => {
         const nodeDef = registry[type];
         if (!nodeDef) return;
-
+        console.log(type)
         let nodeType = 'custom';
-        if (type === 'live_training_monitor') {
-            nodeType = 'monitor';
+        if (type === 'dashboard_logger') {
+            nodeType = 'loss_curve';
+        } else if (configList.includes(type)) {
+            nodeType = 'config'
         }
 
         const newNode: Node = {
@@ -131,8 +135,8 @@ export const useFlowEditor = () => {
 
     const updateLossCurve = async (runId: string | null) => {
         setNodes(nds => nds.map(node => {
-            // Find loss_curve nodes and inject the run_id
-            if ((node.data as any).type === 'loss_curve') {
+            if (node.type === 'loss_curve') {
+                console.log(`Updating Loss Curve ${node.id} with Run ID:`, runId); // Debug Log
                 return {
                     ...node,
                     data: {
@@ -147,6 +151,7 @@ export const useFlowEditor = () => {
             return node;
         }));
     };
+
 
     const saveGraph = async (name: string, description: string, tags: string[], overwrite: boolean) => {
         const payload = {
@@ -200,8 +205,10 @@ export const useFlowEditor = () => {
             }
 
             let nodeType = 'custom';
-            if (n.type === 'loss_curve') {
+            if (n.type === 'dashboard_logger') {
                 nodeType = 'loss_curve';
+            } else if (n.type === 'config') {
+                nodeType = 'config'
             }
 
             return {

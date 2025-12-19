@@ -10,10 +10,12 @@ import FlowCanvas from './FlowCanvas';
 import { useFlowEditor } from '@/hooks/useFlowEditor';
 import CustomNode from './nodes/CustomNode';
 import LossCurveNode from './nodes/LossCurveNode';
+import ConfigNode from './nodes/config/ConfigNode';
 
 const nodeTypes = {
     custom: CustomNode,
-    loss_curve: LossCurveNode
+    loss_curve: LossCurveNode,
+    config: ConfigNode
 };
 
 export default function FlowEditor() {

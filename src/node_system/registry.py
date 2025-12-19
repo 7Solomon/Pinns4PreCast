@@ -7,7 +7,7 @@ import src.node_system.nodes.deepONet_definitions.logger_nodes
 import src.node_system.nodes.training.trainer
 import src.node_system.nodes.physics.material
 import src.node_system.nodes.physics.domain
-import src.node_system.nodes.visualisation.loss_display_nodes
+# import src.node_system.nodes.visualisation.loss_display_nodes # CHANGD SO NOT NEEDED
 import src.node_system.nodes.visualisation.visualisation_nodes
 import src.node_system.nodes.aggregator
 
