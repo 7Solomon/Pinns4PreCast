@@ -71,6 +71,12 @@ export const useFlowEditor = () => {
 
 
     const runSimulation = async () => {
+        if (isRunning) {
+            console.warn("Run already in progress, ignoring.");
+            return;
+        }
+        console.log(" runSimulation called");
+
         setIsRunning(true);
         setCurrentRunId(null); // Reset previous run
 
@@ -97,24 +103,9 @@ export const useFlowEditor = () => {
 
             if (runId) {
                 setCurrentRunId(runId); // Store ID so we can stop it later
+                updateLossCurve(runId);
 
-                // Update visualization nodes
-                setNodes(nds => nds.map(node => {
-                    if ((node.data as any).type === 'loss_curve') {
-                        return {
-                            ...node,
-                            data: {
-                                ...node.data,
-                                config: { ...(node.data.config || {}), run_id: runId }
-                            }
-                        };
-                    }
-                    return node;
-                }));
             }
-
-            // Don't alert success yet, just log it. 
-            // The training is running in background.
             console.log(`Started Run ID: ${runId}`);
 
         } catch (e: any) {
@@ -124,36 +115,37 @@ export const useFlowEditor = () => {
     };
 
     const stopSimulation = async () => {
-        if (!currentRunId) return;
+        if (!currentRunId || !isRunning) return;
 
         try {
-            await axios.post(`http://localhost:8000/execute/stop/${currentRunId}`);
+            const res = await axios.post(`http://localhost:8000/execute/stop/${currentRunId}`);
             alert("Training stopping... (It may take a few seconds to finish the current epoch)");
-            setIsRunning(false); // Enable buttons immediately
+            //setCurrentRunId(res.data.run_id);
+            setIsRunning(false);
+            updateLossCurve(null)
+            setCurrentRunId(null)
         } catch (e) {
             console.error("Failed to stop:", e);
         }
     };
 
-    const updateLossCurve = async (runId: string) => {
-        if (runId) {
-            setNodes(nds => nds.map(node => {
-                // Find loss_curve nodes and inject the run_id
-                if ((node.data as any).type === 'loss_curve') {
-                    return {
-                        ...node,
-                        data: {
-                            ...node.data,
-                            config: {
-                                ...(node.data.config || {}),
-                                run_id: runId
-                            }
+    const updateLossCurve = async (runId: string | null) => {
+        setNodes(nds => nds.map(node => {
+            // Find loss_curve nodes and inject the run_id
+            if ((node.data as any).type === 'loss_curve') {
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        config: {
+                            ...(node.data.config || {}),
+                            run_id: runId
                         }
-                    };
-                }
-                return node;
-            }));
-        }
+                    }
+                };
+            }
+            return node;
+        }));
     };
 
     const saveGraph = async (name: string, description: string, tags: string[], overwrite: boolean) => {

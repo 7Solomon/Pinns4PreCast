@@ -121,6 +121,16 @@ class Node(ABC):
         """Set an input value."""
         self.inputs[port_name] = value
         self._executed = False
+
+    def process(self) -> Dict[str, Any]:
+        """
+        Public method to trigger execution. 
+        Handles state checking and caching automatically.
+        """
+        if not self._executed:
+            self.outputs = self.execute()
+            self._executed = True
+        return self.outputs
     
     @abstractmethod
     def execute(self) -> Dict[str, Any]:
@@ -271,6 +281,8 @@ class NodeGraph:
         if len(order) != len(self.nodes):
             raise ValueError("Graph contains cycles")
         
+        #print(f"ORDER: {order} !!!!")
+        
         return order
     
     def execute(self, output_node: str = None, output_port: str = None, context: Dict[str, Any] = None) -> Any:
@@ -299,8 +311,9 @@ class NodeGraph:
                     node.set_input(conn.to_port, value)
             
             # Execute node
-            node.execute()
-        
+            #node.execute()
+            node.process() # M
+        #print(output_node)
         # Return requested output
         if output_node:
             return self.nodes[output_node].get_output(output_port)

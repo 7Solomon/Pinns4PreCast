@@ -25,7 +25,13 @@ export default function FlowEditor() {
 
     const [showSaveDialog, setShowSaveDialog] = useState(false);
     const [showLoadDialog, setShowLoadDialog] = useState(false);
+    const [isStopping, setIsStopping] = useState(false)
 
+    const handleStop = async () => {
+        setIsStopping(true);
+        await stopSimulation();
+        setIsStopping(false);
+    }
 
 
     const handleSaveSubmit = async (name: string, description: string, tags: string[], overwrite: boolean) => {
@@ -90,16 +96,19 @@ export default function FlowEditor() {
                         <FolderOpen size={16} /> Load
                     </button>
 
+                    {isRunning ? (
+                        <button
+                            onClick={handleStop}
+                            disabled={isStopping} // Disable while stopping
+                            className={`btn-red ${isStopping ? 'opacity-50' : 'animate-pulse'}`}
+                        >
+                            {isStopping ? "Stopping..." : "Stop Training"}
+                        </button>
+                    ) : (<button onClick={runSimulation} className="btn-green">
+                        Run Training
+                    </button>)}
 
-                    {!isRunning ? (
-                        <button onClick={runSimulation} className="btn-green">
-                            Run Training
-                        </button>
-                    ) : (
-                        <button onClick={stopSimulation} className="btn-red animate-pulse">
-                            Stop Training
-                        </button>
-                    )}
+
                 </div>
             </div>
             {showSaveDialog && (

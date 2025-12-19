@@ -21,7 +21,8 @@ class LossCurveNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("run_id", PortType.RUN_ID, required=True, description="Run ID from logger")
+            Port("logger", PortType.LOGGER, required=True, description="Just so that it connnects to tree dont know if necessary")
+            #Port("run_id", PortType.RUN_ID, required=True, description="Run ID from logger")
         ]
 
     @classmethod
@@ -45,18 +46,19 @@ class LossCurveNode(Node):
         return LossCurveConfig
 
     def execute(self):
-        run_id = self.inputs["run_id"]
+        #run_id = self.inputs["run_id"]
         cfg = self.config
         
         # Generate a widget specification for the frontend
-        widget_spec = {
-            "type": "loss_curve",
-            "node_id": self.node_id,
-            "run_id": run_id,
-            "title": cfg.title,
-            "metrics": cfg.metrics,
-            "refresh_rate": cfg.refresh_rate,
-            "data_endpoint": f"/monitor/metrics/{run_id}"
-        }
+        #widget_spec = {
+        #    "type": "loss_curve",
+        #    "node_id": self.node_id,
+        #    "run_id": run_id,
+        #    "title": cfg.title,
+        #    "metrics": cfg.metrics,
+        #    "refresh_rate": cfg.refresh_rate,
+        #    "data_endpoint": f"/monitor/metrics/{run_id}"
+        #}
+        widget_spec = {} # kinda useless because not needed
         
         return {"widget_spec": widget_spec}

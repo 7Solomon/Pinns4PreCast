@@ -1,21 +1,20 @@
-import React, { memo, useEffect, useState, useMemo } from 'react';
+import React, { memo, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { clsx } from 'clsx';
-import { Activity, Loader2, Maximize2, Minimize2, AlertCircle } from 'lucide-react';
+import { Activity, RefreshCcw } from 'lucide-react';
 
-// --- CONFIGURATION ---
+// --- COLOR CONFIGURATION ---
 const METRIC_STYLES: Record<string, { color: string; width: number; dash?: string; name: string }> = {
-  'loss': { color: '#f97316', width: 2.5, name: 'Total Loss' }, // Orange
-  'loss_physics': { color: '#3b82f6', width: 2, name: 'Phys Total' }, // Blue
-  'loss_phys_temperature': { color: '#60a5fa', width: 1.5, dash: '5 5', name: 'Phys (Temp)' },
-  'loss_phys_alpha': { color: '#3b82f6', width: 1.5, dash: '3 3', name: 'Phys (Alpha)' },
-  'loss_bc': { color: '#10b981', width: 2, name: 'BC Total' },   // Green
-  'loss_ic': { color: '#8b5cf6', width: 2, name: 'IC Total' },   // Purple
-  'val_loss': { color: '#ef4444', width: 2, name: 'Val Total' },  // Red
+  'loss_step': { color: '#f97316', width: 3, name: 'Total Loss' },
+  'loss_phys_temperature': { color: '#3b82f6', width: 2, name: 'Phys (Temp)' },
+  'loss_phys_alpha': { color: '#22d3ee', width: 2, dash: '5 5', name: 'Phys (Alpha)' },
+  'loss_bc_temperature': { color: '#10b981', width: 2, name: 'BC (Temp)' },
+  'loss_ic_temperature': { color: '#a855f7', width: 2, name: 'IC (Temp)' },
+  'loss_ic_alpha': { color: '#ff00ff', width: 2, dash: '3 3', name: 'IC (Alpha)' },
 };
 
 const DEFAULT_STYLE = { color: '#94a3b8', width: 1, dash: undefined, name: 'Metric' };
@@ -37,8 +36,15 @@ const LossCurveNode = ({ data, selected }: NodeProps) => {
   const [useLogScale, setUseLogScale] = useState(true);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
 
+  // --- ZOOM & PAN STATE ---
+  const [xDomain, setXDomain] = useState<[number, number] | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // DRAG STATE
+  const [isDragging, setIsDragging] = useState(false);
+  const lastMouseX = useRef<number>(0);
+
   const runId = data.config?.run_id || "unknown";
-  const refreshRate = data.config?.refresh_rate || 2000;
 
   useEffect(() => {
     if (!runId || runId === "unknown") return;
@@ -47,195 +53,232 @@ const LossCurveNode = ({ data, selected }: NodeProps) => {
       try {
         setLoading(true);
         const response = await fetch(`http://localhost:8000/monitor/metrics/${runId}`);
-        if (!response.ok) {
-          if (response.status === 404) return;
-          throw new Error(`HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const result = await response.json();
-
         if (result.metrics && Array.isArray(result.metrics)) {
-          // --- CRITICAL FIX START ---
           const cleanData = result.metrics.map((row: any) => {
             const newRow: any = { ...row };
-
-            // 1. Ensure 'step' is a number
             newRow.step = Number(newRow.step);
-
             Object.keys(newRow).forEach(k => {
-              if (k === 'step' || k === 'epoch' || k === 'timestamp') return;
-
-              // 2. Handle Empty Strings from Backend
-              if (newRow[k] === "" || newRow[k] === null || newRow[k] === undefined) {
-                newRow[k] = null;
-              } else {
-                // 3. Force Convert to Number
-                const val = Number(newRow[k]);
-
-                // 4. Handle Zero for Log Scale (Log(0) = Crash)
-                // If value is 0 or NaN, treat as null for chart
-                if (isNaN(val) || (useLogScale && val <= 0)) {
-                  newRow[k] = null;
-                } else {
-                  newRow[k] = val;
-                }
-              }
+              if (['step', 'epoch', 'timestamp'].includes(k)) return;
+              const val = Number(newRow[k]);
+              if (isNaN(val) || (useLogScale && val <= 0)) newRow[k] = null;
+              else newRow[k] = val;
             });
             return newRow;
           });
-          // --- CRITICAL FIX END ---
-
-          if (cleanData.length > 0) {
-            setPlotData(cleanData);
-            setError(null);
-          }
+          setPlotData(cleanData);
+          setError(null);
         }
       } catch (e: any) {
-        console.error("Poll failed:", e);
-        setError("Connection lost");
+        if (plotData.length === 0) setError("Connection lost");
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, refreshRate);
+    const interval = setInterval(fetchData, 2000);
     return () => clearInterval(interval);
-  }, [runId, refreshRate, useLogScale]); // Added useLogScale dependency to re-clean 0s
+  }, [runId, useLogScale]);
 
-  // Determine lines to draw
-  const availableKeys = useMemo(() => {
+
+  const visibleKeys = useMemo(() => {
     if (plotData.length === 0) return [];
-    return Object.keys(plotData[0]).filter(k =>
-      k !== 'step' && k !== 'epoch' && k !== 'timestamp'
+    const allKeys = Object.keys(plotData[0]).filter(k =>
+      !['step', 'epoch', 'timestamp'].includes(k) &&
+      plotData.some(row => row[k] !== null)
     );
-  }, [plotData]);
+    return showAllMetrics ? allKeys : allKeys.filter(k => METRIC_STYLES[k]);
+  }, [plotData, showAllMetrics]);
 
-  const visibleKeys = showAllMetrics
-    ? availableKeys
-    : availableKeys.filter(k =>
-      k === 'loss' || k === 'val_loss' || k.startsWith('loss_physics')
-    );
+  // --- HELPERS ---
+  const getDataBounds = () => {
+    if (plotData.length === 0) return { min: 0, max: 0 };
+    const allSteps = plotData.map(d => d.step);
+    return { min: Math.min(...allSteps), max: Math.max(...allSteps) };
+  };
+
+  // --- ZOOM HANDLER (WHEEL) ---
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (plotData.length === 0) return;
+
+    const { min: dataMin, max: dataMax } = getDataBounds();
+    const [currentMin, currentMax] = xDomain || [dataMin, dataMax];
+    const range = currentMax - currentMin;
+    const ZOOM_SPEED = 0.1;
+    const delta = range * ZOOM_SPEED;
+
+
+    let newMin, newMax;
+
+    if (e.deltaY < 0) { // Zoom In
+      newMin = currentMin + delta;
+      newMax = currentMax - delta;
+    } else { // Zoom Out
+      newMin = currentMin - delta;
+      newMax = currentMax + delta;
+    }
+
+    if (newMax <= newMin) return;
+    setXDomain([newMin, newMax]);
+  }, [xDomain, plotData]);
+
+  useEffect(() => {
+    const node = chartRef.current;
+    if (!node) return;
+
+    node.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      node.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
+  // --- PAN HANDLERS (DRAG) ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Stop React Flow from dragging the node
+    e.preventDefault();
+    setIsDragging(true);
+    lastMouseX.current = e.clientX;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    // Only run if we are actively dragging
+    if (!isDragging || !chartRef.current || plotData.length === 0) return;
+
+    e.stopPropagation();
+    e.preventDefault();
+
+    const currentX = e.clientX;
+    const pixelDelta = lastMouseX.current - currentX; // Positive = Dragged Left
+
+    // 1. Calculate how much to shift the domain
+    const { width } = chartRef.current.getBoundingClientRect();
+    const { min: dataMin, max: dataMax } = getDataBounds();
+    const [currentMin, currentMax] = xDomain || [dataMin, dataMax];
+    const domainRange = currentMax - currentMin;
+
+    // Convert pixels to domain units
+    const domainShift = (pixelDelta / width) * domainRange;
+
+    // 2. Apply shift
+    setXDomain([currentMin + domainShift, currentMax + domainShift]);
+
+    // 3. Update reference for next frame
+    lastMouseX.current = currentX;
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const resetZoom = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setXDomain(null);
+  };
 
   return (
     <div className={clsx(
       "min-w-[600px] h-[450px] rounded-xl border bg-slate-900/95 backdrop-blur-md shadow-2xl flex flex-col transition-all duration-200",
       selected ? "border-blue-400 ring-2 ring-blue-500/20" : "border-slate-800"
     )}>
+      <Handle type="target" position={Position.Left} id="run_id" className="!bg-slate-900 border-blue-500" />
 
-      <Handle type="target" position={Position.Left} id="run_id"
-        className="!w-3 !h-3 !border-2 !bg-slate-900 border-blue-500" />
-
-      {/* HEADER: Draggable area */}
-      <div className="h-1 w-full bg-blue-500 rounded-t-xl" />
+      {/* HEADER */}
       <div className="p-3 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 rounded-t-xl cursor-grab active:cursor-grabbing">
         <div className="flex items-center gap-2">
           <Activity size={16} className="text-blue-500" />
-          <div className="flex flex-col">
-            <span className="font-bold text-slate-200 text-sm">Loss Metrics</span>
-            <span className="text-[10px] text-slate-500 font-mono">
-              {runId !== "unknown" ? runId.slice(0, 15) : "Waiting..."}
-            </span>
-          </div>
+          <span className="font-bold text-slate-200 text-sm">Training Loss</span>
         </div>
 
-        {/* CONTROLS: Non-Draggable area */}
         <div className="flex items-center gap-2 nodrag cursor-auto">
-          <button
-            onClick={() => setUseLogScale(!useLogScale)}
-            className={clsx(
-              "px-2 py-1 text-[10px] font-bold rounded border transition-colors",
-              useLogScale
-                ? "bg-blue-500/20 text-blue-400 border-blue-500/50"
-                : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
-            )}
-          >
+          {xDomain && (
+            <button onClick={resetZoom} className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded border bg-yellow-500/10 text-yellow-500 border-yellow-500/30 hover:bg-yellow-500/20">
+              <RefreshCcw size={10} /> RESET
+            </button>
+          )}
+          <button onClick={() => setUseLogScale(!useLogScale)} className="px-2 py-1 text-[10px] font-bold rounded border bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700">
             {useLogScale ? "LOG" : "LIN"}
-          </button>
-
-          <button
-            onClick={() => setShowAllMetrics(!showAllMetrics)}
-            className="p-1 hover:bg-slate-800 rounded text-slate-400 transition-colors"
-          >
-            {showAllMetrics ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
       </div>
 
-      {/* CHART: Non-Draggable area */}
-      <div className="flex-1 p-2 min-h-0 relative nodrag cursor-auto bg-slate-950/30">
-
-        {error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 text-sm gap-2">
-            <AlertCircle size={20} />
-            <span>{error}</span>
-          </div>
-        ) : plotData.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm animate-pulse">
-            Waiting for training to start...
+      {/* CHART AREA */}
+      <div
+        ref={chartRef}
+        className={clsx(
+          "flex-1 p-2 min-h-0 relative nodrag nowheel bg-slate-900/50 pointer-events-auto rounded-b-xl",
+          isDragging ? "cursor-grabbing" : "cursor-default" // Change cursor on drag
+        )}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}  // SAFETY END
+      >
+        {error || plotData.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">
+            {error ? error : "Waiting for data..."}
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={plotData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+          /* "select-none" prevents text highlighting while dragging */
+          <div className="w-full h-full select-none">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={plotData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
 
-              <XAxis
-                dataKey="step"
-                type="number"
-                stroke="#64748b"
-                fontSize={10}
-                domain={['dataMin', 'dataMax']} // Tight fit to data
-                tickCount={8}
-              />
+                <XAxis
+                  dataKey="step"
+                  type="number"
+                  stroke="#64748b"
+                  fontSize={10}
+                  domain={xDomain || ['dataMin', 'dataMax']}
+                  allowDataOverflow={true}
+                  tickCount={6}
+                />
 
-              <YAxis
-                stroke="#64748b"
-                fontSize={10}
-                scale={useLogScale ? 'log' : 'linear'}
-                domain={['auto', 'auto']}
-                allowDataOverflow={true}
-                tickFormatter={formatScientific}
-                width={45}
-              />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={10}
+                  scale={useLogScale ? 'log' : 'linear'}
+                  domain={['auto', 'auto']}
+                  allowDataOverflow={true}
+                  tickFormatter={formatScientific}
+                  width={45}
+                />
 
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                  borderColor: '#334155',
-                  borderRadius: '6px',
-                  fontSize: '11px'
-                }}
-                labelStyle={{ color: '#94a3b8' }}
-                formatter={(value: number | string | undefined) => [formatScientific(Number(value ?? 0)), '']}
-              />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px' }}
+                  labelStyle={{ color: '#94a3b8' }}
+                  formatter={(val: any) => [formatScientific(val), '']}
+                />
 
-              <Legend
-                verticalAlign="top"
-                height={30}
-                iconSize={10}
-                wrapperStyle={{ fontSize: '11px', paddingTop: '5px' }}
-                formatter={(value) => METRIC_STYLES[value]?.name || value}
-              />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} formatter={(val) => METRIC_STYLES[val]?.name || val} />
 
-              {visibleKeys.map((key) => {
-                const style = METRIC_STYLES[key] || DEFAULT_STYLE;
-
-                return (
-                  <Line
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
-                    stroke={style.color}
-                    strokeWidth={style.width}
-                    strokeDasharray={style.dash}
-                    dot={false}
-                    connectNulls={true}
-                    isAnimationActive={false}
-                  />
-                );
-              })}
-            </LineChart>
-          </ResponsiveContainer>
+                {visibleKeys.map((key) => {
+                  const style = METRIC_STYLES[key] || DEFAULT_STYLE;
+                  return (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      stroke={style.color}
+                      strokeWidth={style.width}
+                      strokeDasharray={style.dash}
+                      dot={false}
+                      connectNulls={true}
+                      isAnimationActive={false}
+                    />
+                  );
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </div>
     </div>
