@@ -42,7 +42,7 @@ def create_config_node(
         def execute(self) -> Dict[str, Any]:
             return {"config": self.config}
 
-    # Rename the class for debugging clarity
+    # Renaming the class for debugging clarity
     ConfigNode.__name__ = f"{config_model.__name__}Node"
     
 

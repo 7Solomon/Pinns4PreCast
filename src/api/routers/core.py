@@ -1,6 +1,6 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from src.node_system.session import stop_session
+import src.node_system.session as session_state 
 from src.node_system.core import NodeGraph, NodeRegistry
 from src.api.models import GraphExecutionPayload
 from src.api.utils import port_to_dict, get_config_schema_json
@@ -38,15 +38,20 @@ def get_node_registry():
 
 @router.post("/execute")
 async def execute_graph(payload: GraphExecutionPayload, background_tasks: BackgroundTasks):
-    print(f"Received execution request...")
     
+    if session_state.EXECUTION_LOCK:
+        raise HTTPException(status_code=409, detail="A training session is already running/queued.")
+
+    print("🔒 Acquiring Execution Lock")
+    session_state.EXECUTION_LOCK = True
+
     try:
+        print(f"Received execution request...")
         run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         print(f"Assigning Run ID: {run_id}")
 
         global_context = {
             "run_id": run_id,
-            #"user": "imb-user-johannes"
         }
 
         # BUILD GRAPH
@@ -65,20 +70,36 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
             except ValueError as e:
                 print(f"Warning: Connection failed: {e}")
 
+        # DEFINE WRAPPER
+        def protected_execute(*args, **kwargs):
+            try:
+                graph.execute(*args, **kwargs)
+            finally:
+                print("🔓 Releasing Execution Lock (Task Finished)")
+                session_state.EXECUTION_LOCK = False
+
         # FIRE AND FORGET
         background_tasks.add_task(
-            graph.execute, 
+            protected_execute, 
             output_node=payload.target_node_id, 
             context=global_context
         )
 
-        # RETURN ID IMMEDIATELY
         return {
             "status": "started",
             "message": "Graph started in background",
-            "run_id": run_id, # <--- Frontend gets it here!
+            "run_id": run_id, 
             "widgets": []
         }
+
+    except Exception as e:
+        print("🔓 Releasing Execution Lock (Error during setup)")
+        session_state.EXECUTION_LOCK = False
+        
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
     except Exception as e:
         import traceback
@@ -89,7 +110,7 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
 
 @router.post("/execute/stop/{run_id}")
 def stop_execution(run_id: str):
-    success = stop_session(run_id)
+    success = session_state.stop_session(run_id)
     if success:
         return {"message": f"Stop signal sent to run {run_id}"}
     else:

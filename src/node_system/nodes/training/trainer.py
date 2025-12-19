@@ -46,6 +46,7 @@ class LightningTrainerNode(Node):
         return TrainingConfig
 
     def execute(self) -> Dict[str, Any]:
+        print("Traininer is NOw executing")
         solver = self.inputs["solver"]
         train_loader = self.inputs["dataloader"]
         val_loader = self.inputs.get("val_dataloader")

@@ -28,7 +28,6 @@ def get_training_metrics(run_id: str, limit: int = 100):
         df = pd.read_csv(metrics_path)
         if len(df) == 0:
             return {"metrics": [], "total_epochs": 0, "latest_epoch": 0}
-        
         recent = df.tail(limit)
         metrics = recent.fillna('').to_dict('records')
         latest_epoch = int(df['epoch'].max()) if 'epoch' in df else 0
