@@ -34,13 +34,17 @@ def port_to_dict(ports: Any) -> Dict[str, Any]:
                 
     return result
 
-
 def get_config_schema_json(node_cls):
     """Extracts the JSON Schema from the Pydantic config model."""
     schema_model = node_cls.get_config_schema()
     if schema_model:
-        if hasattr(schema_model, "model_json_schema"):
-            return schema_model.model_json_schema()
-        elif hasattr(schema_model, "schema"):
-            return schema_model.schema()
-    return {}
+        try:
+            if hasattr(schema_model, "model_json_schema"):
+                return schema_model.model_json_schema(mode='serialization')
+            elif hasattr(schema_model, "schema"):
+                return schema_model.schema()
+        except Exception as e:
+            print(f"Error generating schema for {node_cls.__name__}: {e}")
+            return None
+            
+    return None
