@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import shutil
 import glob
 import pandas as pd
@@ -11,7 +12,7 @@ RUNS_DIR = "content/runs"
 
 @router.get("/status/{run_id}")
 def get_training_status(run_id: str):
-    status_path = f"content/runs/{run_id}/status.json"
+    status_path = f"{RUNS_DIR}/{run_id}/status.json"
     if not os.path.exists(status_path):
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
     
@@ -44,39 +45,60 @@ def get_training_metrics(run_id: str, limit: int = 100):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading metrics: {str(e)}")
 
-@router.get("/vis/sensor/{run_id}")
-def get_sensor_data(run_id: str):
+def extract_epoch(filename):
+    """Helper to get 10 from 'epoch_10.csv' for sorting"""
+    match = re.search(r'epoch_(\d+)', filename)
+    return int(match.group(1)) if match else -1
+
+@router.get("/monitor/sensor/{run_id}")
+def get_sensor_history(run_id: str):
     """
-    Returns a dictionary of all available CSV files for a run.
-    Structure:
-    {
-       "temperature": { "epoch_0.csv": "raw_csv_string", ... },
-       "alpha": { "epoch_0.csv": "raw_csv_string", ... }
-    }
+    Parses all CSVs on the server and returns a single merged time-series JSON.
+    Returns: { "data": [ { "step": 0, "temperature": 25.5, "alpha": 0.1 }, ... ] }
     """
-    run_path = os.path.join(RUNS_DIR, run_id)
+    run_path = os.path.join(RUNS_DIR, run_id) # Ensure this matches your RUNS_DIR
+    print(run_path)
     if not os.path.exists(run_path):
         raise HTTPException(status_code=404, detail="Run not found")
 
-    result = {"temperature": {}, "alpha": {}}
-    
-    # 1. Load Temperature CSVs
+    # Master dictionary: { epoch_number: { "step": 10, "temp": ... } }
+    history = {}
+
+    # --- 1. Process Temperature Files ---
     temp_path = os.path.join(run_path, "sensors_temp")
     if os.path.exists(temp_path):
-        for f in glob.glob(os.path.join(temp_path, "*.csv")):
-            fname = os.path.basename(f)
-            with open(f, "r") as file:
-                result["temperature"][fname] = file.read()
+        files = glob.glob(os.path.join(temp_path, "*.csv"))
+        for f in files:
+            epoch = extract_epoch(os.path.basename(f))
+            try:
+                df = pd.read_csv(f)                
+                val = df.iloc[:, 0].mean() if not df.empty else 0
+                
+                if epoch not in history: history[epoch] = {"step": epoch}
+                history[epoch]["temperature"] = val
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
 
-    # 2. Load Alpha CSVs
+    # --- 2. Process Alpha Files ---
     alpha_path = os.path.join(run_path, "sensors_alpha")
     if os.path.exists(alpha_path):
-        for f in glob.glob(os.path.join(alpha_path, "*.csv")):
-            fname = os.path.basename(f)
-            with open(f, "r") as file:
-                result["alpha"][fname] = file.read()
+        files = glob.glob(os.path.join(alpha_path, "*.csv"))
+        for f in files:
+            epoch = extract_epoch(os.path.basename(f))
+            try:
+                df = pd.read_csv(f)
+                val = df.iloc[:, 0].mean() if not df.empty else 0
+                
+                if epoch not in history: history[epoch] = {"step": epoch}
+                history[epoch]["alpha"] = val
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
 
-    return result
+    # --- 3. Convert to List and Sort ---
+    data_list = list(history.values())
+    data_list.sort(key=lambda x: x["step"])
+
+    return {"data": data_list}
 
 
 @router.get("/runs")
