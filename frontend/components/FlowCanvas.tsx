@@ -30,16 +30,29 @@ export default function FlowCanvas({
                 nodeTypes={nodeTypes}
                 proOptions={proOptions}
                 fitView
-                defaultEdgeOptions={{ style: { stroke: '#475569', strokeWidth: 2 }, animated: true }}
+                defaultEdgeOptions={{
+                    style: { stroke: '#60a5fa', strokeWidth: 2 },
+                    animated: true
+                }}
                 minZoom={0.1}
                 maxZoom={2}
             >
-                <Background color="#334155" variant={BackgroundVariant.Dots} gap={24} size={1.5} className="opacity-40" />
-                <Controls className="!bg-slate-800/90 !border-slate-700 !fill-slate-200" />
+                <Background
+                    color="#334155"
+                    variant={BackgroundVariant.Dots}
+                    gap={24}
+                    size={1.5}
+                    className="opacity-30"
+                />
+                <Controls
+                    className="!bg-slate-800 !border-slate-600 !fill-slate-200 shadow-xl"
+                    style={{ border: '1px solid rgb(71, 85, 105)' }}
+                />
                 <MiniMap
-                    className="!bg-slate-800/90 !border-slate-700"
+                    className="!bg-slate-800 !border-slate-600 shadow-xl"
+                    style={{ border: '1px solid rgb(71, 85, 105)' }}
                     nodeColor={() => '#475569'}
-                    maskColor="rgba(15, 23, 42, 0.6)"
+                    maskColor="rgba(2, 6, 23, 0.8)"
                 />
             </ReactFlow>
         </div>

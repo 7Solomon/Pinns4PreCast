@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Play, Save, FolderOpen } from 'lucide-react';
+import { Play, Save, FolderOpen, Square } from 'lucide-react';
 import { SaveDialog } from './graph_management/SaveDialog';
 import { LoadDialog } from './graph_management/LoadDialog';
 import Sidebar from './Sidebar';
@@ -27,22 +27,20 @@ export default function FlowEditor() {
 
     const [showSaveDialog, setShowSaveDialog] = useState(false);
     const [showLoadDialog, setShowLoadDialog] = useState(false);
-    const [isStopping, setIsStopping] = useState(false)
-    const [currentGraphName, setCurrentGraphName] = useState('')
+    const [isStopping, setIsStopping] = useState(false);
+    const [currentFileName, setCurrentFileName] = useState('')
 
     const handleStop = async () => {
         setIsStopping(true);
         await stopSimulation();
         setIsStopping(false);
-    }
-
+    };
 
     const handleSaveSubmit = async (name: string, description: string, tags: string[], overwrite: boolean) => {
         try {
-
             await saveGraph(name, description, tags, overwrite);
+            setCurrentFileName(name)
             alert(`Graph saved as "${name}"`);
-            setCurrentGraphName(name);
             setShowSaveDialog(false);
         } catch (e: any) {
             alert(`Failed to save: ${e.response?.data?.detail || e.message}`);
@@ -57,11 +55,9 @@ export default function FlowEditor() {
             }
             const res = await axios.get(`http://localhost:8000/graphs/load/${filename}`);
             loadGraph(res.data.graph);
+            setCurrentFileName(res.data.graph.name)
             alert(`Loaded "${res.data.graph.name}"`);
             setShowLoadDialog(false);
-
-            const rawName = filename.replace('.json', '');
-            setCurrentGraphName(rawName);
         } catch (e: any) {
             alert(`Failed to load: ${e.response?.data?.detail || e.message}`);
         }
@@ -69,9 +65,7 @@ export default function FlowEditor() {
 
     return (
         <>
-            {/* Main Application UI */}
-            <div className="w-full h-full flex bg-slate-950 relative isolate overflow-hidden">
-
+            <div className="w-full h-full flex bg-slate-950 relative overflow-hidden">
                 <Sidebar
                     registry={registry}
                     onAddNode={addNode}
@@ -88,41 +82,50 @@ export default function FlowEditor() {
                     nodeTypes={nodeTypes}
                 />
 
-                {/* --- CONTROL PANEL OVERLAY --- */}
-                <div className="absolute top-4 right-4 z-50 flex gap-3 pointer-events-auto">
+                {/* Control Panel - Improved styling */}
+                <div className="absolute top-6 right-6 z-50 flex gap-3">
                     <button
-                        onClick={() => { setShowLoadDialog(false); setShowSaveDialog(true) }}
-                        className="flex gap-2 items-center bg-slate-800 text-slate-200 px-4 py-2 rounded-lg border border-slate-700 shadow-xl hover:bg-slate-700 transition-all hover:scale-105"
+                        onClick={() => { setShowLoadDialog(false); setShowSaveDialog(true); }}
+                        className="flex gap-2 items-center bg-slate-800 text-slate-100 px-5 py-2.5 rounded-lg border border-slate-600 shadow-2xl hover:bg-slate-700 hover:border-slate-500 transition-all hover:scale-105 active:scale-95 font-medium"
                     >
-                        <Save size={16} /> Save
+                        <Save size={18} /> Save
                     </button>
 
                     <button
-                        onClick={() => { setShowSaveDialog(false); setShowLoadDialog(true) }}
-                        className="flex gap-2 items-center bg-slate-800 text-slate-200 px-4 py-2 rounded-lg border border-slate-700 shadow-xl hover:bg-slate-700 transition-all hover:scale-105"
+                        onClick={() => { setShowSaveDialog(false); setShowLoadDialog(true); }}
+                        className="flex gap-2 items-center bg-slate-800 text-slate-100 px-5 py-2.5 rounded-lg border border-slate-600 shadow-2xl hover:bg-slate-700 hover:border-slate-500 transition-all hover:scale-105 active:scale-95 font-medium"
                     >
-                        <FolderOpen size={16} /> Load
+                        <FolderOpen size={18} /> Load
                     </button>
 
                     {isRunning ? (
                         <button
                             onClick={handleStop}
-                            disabled={isStopping} // Disable while stopping
-                            className={`btn-red ${isStopping ? 'opacity-50' : 'animate-pulse'}`}
+                            disabled={isStopping}
+                            className={`flex gap-2 items-center px-6 py-2.5 rounded-lg shadow-2xl transition-all font-semibold ${isStopping
+                                ? 'bg-red-800 text-red-200 border border-red-700 cursor-not-allowed'
+                                : 'bg-red-600 text-white border border-red-500 hover:bg-red-500 hover:scale-105 active:scale-95 animate-pulse'
+                                }`}
                         >
+                            <Square size={18} fill="currentColor" />
                             {isStopping ? "Stopping..." : "Stop Training"}
                         </button>
-                    ) : (<button onClick={runSimulation} className="btn-green">
-                        Run Training
-                    </button>)}
-
-
+                    ) : (
+                        <button
+                            onClick={runSimulation}
+                            className="flex gap-2 items-center bg-emerald-600 text-white px-6 py-2.5 rounded-lg border border-emerald-500 shadow-2xl shadow-emerald-900/30 hover:bg-emerald-500 hover:scale-105 active:scale-95 transition-all font-semibold"
+                        >
+                            <Play size={18} fill="currentColor" />
+                            Run Training
+                        </button>
+                    )}
                 </div>
             </div>
+
             {showSaveDialog && (
                 <SaveDialog
                     isOpen={showSaveDialog}
-                    currentGraphName={currentGraphName}
+                    currentGraphName={currentFileName}
                     onClose={() => setShowSaveDialog(false)}
                     onSave={handleSaveSubmit}
                     nodes={nodes}
@@ -137,11 +140,6 @@ export default function FlowEditor() {
                     onLoad={handleLoadSubmit}
                 />
             )}
-            <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.5); border-radius: 3px; }
-            `}</style>
         </>
     );
 }

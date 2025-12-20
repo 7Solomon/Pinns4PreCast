@@ -41,7 +41,6 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
     
     if session_state.EXECUTION_LOCK:
         raise HTTPException(status_code=409, detail="A training session is already running/queued.")
-
     print("🔒 Acquiring Execution Lock")
     session_state.EXECUTION_LOCK = True
 
@@ -70,6 +69,7 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
             except ValueError as e:
                 print(f"Warning: Connection failed: {e}")
 
+        print(graph.to_dict())
         # DEFINE WRAPPER
         def protected_execute(*args, **kwargs):
             try:

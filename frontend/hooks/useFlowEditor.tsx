@@ -46,6 +46,8 @@ export const useFlowEditor = () => {
             nodeType = 'loss_curve';
         } else if (configList.includes(type)) {
             nodeType = 'config'
+        } else if (type === 'visualization_callback') {
+            nodeType = 'sensor_vis';
         }
 
         const newNode: Node = {
@@ -108,7 +110,7 @@ export const useFlowEditor = () => {
             if (runId) {
                 setCurrentRunId(runId); // Store ID so we can stop it later
                 updateLossCurve(runId);
-
+                updateSensorVis(runId)
             }
             console.log(`Started Run ID: ${runId}`);
 
@@ -126,7 +128,8 @@ export const useFlowEditor = () => {
             alert("Training stopping... (It may take a few seconds to finish the current epoch)");
             //setCurrentRunId(res.data.run_id);
             setIsRunning(false);
-            //updateLossCurve(null)
+            updateLossCurve(null)
+            updateSensorVis(null)
             setCurrentRunId(null)
         } catch (e) {
             console.error("Failed to stop:", e);
@@ -137,6 +140,25 @@ export const useFlowEditor = () => {
         setNodes(nds => nds.map(node => {
             if (node.type === 'loss_curve') {
                 console.log(`Updating Loss Curve ${node.id} with Run ID:`, runId); // Debug Log
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        config: {
+                            ...(node.data.config || {}),
+                            run_id: runId
+                        }
+                    }
+                };
+            }
+            return node;
+        }));
+    };
+
+    const updateSensorVis = async (runId: string | null) => {
+        setNodes(nds => nds.map(node => {
+            if (node.type === 'sensor_vis') {
+                console.log(`Updating Sensor vis ${node.id} with Run ID:`, runId); // Debug Log
                 return {
                     ...node,
                     data: {
@@ -209,6 +231,8 @@ export const useFlowEditor = () => {
                 nodeType = 'loss_curve';
             } else if (configList.includes(n.type)) {
                 nodeType = 'config'
+            } else if (n.type === 'visualization_callback') {
+                nodeType = 'sensor_vis';
             }
 
             return {

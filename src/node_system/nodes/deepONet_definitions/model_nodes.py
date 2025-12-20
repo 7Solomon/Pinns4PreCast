@@ -7,6 +7,21 @@ from src.node_system.core import Node, Port, PortType, NodeMetadata, register_no
 import torch.nn as nn
 import torch
 
+class FourierFeatureEncoding(nn.Module):
+    """
+        Fourier Feature Mapping as described in "Fourier Features Let Networks Learn High Frequency Functions in Low Dimensional Domains, THIS GOOD for High Freqeuncy changes"
+    """
+    def __init__(self, input_dim, mapping_size, scale=10.0):
+        super().__init__()
+        # B * inputs -> features
+        #self.B = nn.Parameter(torch.randn(input_dim, mapping_size) * scale, requires_grad=False)
+        self.register_buffer('B', torch.randn(input_dim, mapping_size) * scale)
+
+    def forward(self, x):
+        # x: [batch, points, input_dim]
+        # proj: [batch, points, mapping_size]
+        proj = torch.matmul(x, self.B) * 2 * torch.pi
+        return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
 
 class FlexDeepONet(nn.Module):
 
@@ -46,7 +61,6 @@ class FlexDeepONet(nn.Module):
         
         # ========== FOURIER ENCODING (TRUNK INPUT) ==========
         if fourier_features is not None:
-            raise NotImplementedError("Fooureire feature should be proablaby its own node")
             self.fourier_encoding = FourierFeatureEncoding(**fourier_features)
             # Fourier features: [sin(2πZx), cos(2πZx)] → 2 * mapping_size
             trunk_input_size = 2 * fourier_features['mapping_size']
@@ -185,7 +199,7 @@ class FlexDeepONetNode(Node):
         trunk_dict = to_dict(m_cfg.trunk_config)
         
         fourier_args = None
-        if m_cfg.fourier_features:
+        if hasattr(m_cfg, "fourier_features"):
             fourier_args = to_dict(m_cfg.fourier_features)
 
         # 5. Instantiate

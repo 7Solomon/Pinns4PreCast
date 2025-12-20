@@ -1,16 +1,32 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom'; // <--- CRITICAL IMPORT
 import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
 import { Settings, X, Maximize2 } from 'lucide-react';
 import { ConfigForm } from './ConfigForm';
 
-// --- MODAL COMPONENT ---
+// --- PORTAL MODAL COMPONENT ---
 const Modal = ({ isOpen, onClose, title, children }: any) => {
+    // Prevent scrolling body when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => { document.body.style.overflow = 'unset'; };
+    }, [isOpen]);
+
     if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+
+    // We render this directly into the document.body to escape the Zoom/Pan transform
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={onClose}
+        >
             <div
-                className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-[600px] max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
-                onClick={e => e.stopPropagation()}
+                className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
+                onClick={e => e.stopPropagation()} // Stop click from closing modal
             >
                 {/* Header */}
                 <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-950">
@@ -31,33 +47,27 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
                     </button>
                 </div>
 
-                {/* Body */}
-                <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-900">
+                {/* Body - using 'nodrag' is good practice even in portals just in case */}
+                <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-900 nodrag cursor-default">
                     {children}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body // Target the body
     );
 };
 
 // --- MAIN NODE COMPONENT ---
 export default function ConfigNode({ data, id }: NodeProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
-
-    // 1. Get setNodes from ReactFlow to properly update state
     const { setNodes } = useReactFlow();
 
-    // 2. Handle Save using ReactFlow's immutable update pattern
     const handleSave = useCallback((newConfig: any) => {
         setNodes((nodes) => nodes.map((node) => {
             if (node.id === id) {
-                // Return a NEW object to trigger React re-renders properly
                 return {
                     ...node,
-                    data: {
-                        ...node.data,
-                        config: newConfig
-                    }
+                    data: { ...node.data, config: newConfig }
                 };
             }
             return node;
@@ -66,6 +76,7 @@ export default function ConfigNode({ data, id }: NodeProps) {
     }, [id, setNodes]);
 
     return (
+        // This container stays SMALL and CLEAN in your graph
         <div className="relative min-w-[240px] bg-slate-950 border border-slate-800 rounded-xl shadow-xl transition-all hover:border-blue-500/50 group isolate z-10">
 
             {/* Header Area */}
@@ -87,7 +98,7 @@ export default function ConfigNode({ data, id }: NodeProps) {
                     </div>
                 </div>
 
-                {/* Edit Button */}
+                {/* Edit Button - Opens Portal Modal */}
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -100,7 +111,7 @@ export default function ConfigNode({ data, id }: NodeProps) {
                 </button>
             </div>
 
-            {/* Config Summary (Optional: Show 1-2 key values) */}
+            {/* Config Summary */}
             <div className="px-3 pb-3 pt-0">
                 {data.config && Object.keys(data.config).length > 0 ? (
                     <div className="text-[10px] text-slate-500 font-mono mt-2 px-2 py-1 bg-slate-900 rounded border border-slate-800 truncate">
@@ -119,7 +130,7 @@ export default function ConfigNode({ data, id }: NodeProps) {
                 className="!bg-blue-500 !w-3 !h-3 !border-2 !border-slate-950 transition-transform hover:scale-125 z-50"
             />
 
-            {/* Modal */}
+            {/* Modal - Now rendered via Portal */}
             <Modal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
