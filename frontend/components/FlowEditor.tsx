@@ -28,6 +28,7 @@ export default function FlowEditor() {
     const [showSaveDialog, setShowSaveDialog] = useState(false);
     const [showLoadDialog, setShowLoadDialog] = useState(false);
     const [isStopping, setIsStopping] = useState(false)
+    const [currentGraphName, setCurrentGraphName] = useState('')
 
     const handleStop = async () => {
         setIsStopping(true);
@@ -38,8 +39,10 @@ export default function FlowEditor() {
 
     const handleSaveSubmit = async (name: string, description: string, tags: string[], overwrite: boolean) => {
         try {
+
             await saveGraph(name, description, tags, overwrite);
             alert(`Graph saved as "${name}"`);
+            setCurrentGraphName(name);
             setShowSaveDialog(false);
         } catch (e: any) {
             alert(`Failed to save: ${e.response?.data?.detail || e.message}`);
@@ -56,6 +59,9 @@ export default function FlowEditor() {
             loadGraph(res.data.graph);
             alert(`Loaded "${res.data.graph.name}"`);
             setShowLoadDialog(false);
+
+            const rawName = filename.replace('.json', '');
+            setCurrentGraphName(rawName);
         } catch (e: any) {
             alert(`Failed to load: ${e.response?.data?.detail || e.message}`);
         }
@@ -116,6 +122,7 @@ export default function FlowEditor() {
             {showSaveDialog && (
                 <SaveDialog
                     isOpen={showSaveDialog}
+                    currentGraphName={currentGraphName}
                     onClose={() => setShowSaveDialog(false)}
                     onSave={handleSaveSubmit}
                     nodes={nodes}

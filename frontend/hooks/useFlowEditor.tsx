@@ -126,7 +126,7 @@ export const useFlowEditor = () => {
             alert("Training stopping... (It may take a few seconds to finish the current epoch)");
             //setCurrentRunId(res.data.run_id);
             setIsRunning(false);
-            updateLossCurve(null)
+            //updateLossCurve(null)
             setCurrentRunId(null)
         } catch (e) {
             console.error("Failed to stop:", e);
@@ -207,7 +207,7 @@ export const useFlowEditor = () => {
             let nodeType = 'custom';
             if (n.type === 'dashboard_logger') {
                 nodeType = 'loss_curve';
-            } else if (n.type === 'config') {
+            } else if (configList.includes(n.type)) {
                 nodeType = 'config'
             }
 
