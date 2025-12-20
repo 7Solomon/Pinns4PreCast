@@ -11,7 +11,8 @@ class DeepONetDatasetNode(Node):
             Port("problem", PortType.PROBLEM),
             Port("material", PortType.MATERIAL),
             Port("domain", PortType.DOMAIN),
-            Port("composite_dataset_config", PortType.CONFIG, required=False)
+            Port("data_config", PortType.CONFIG, required=False),
+            Port("input_config", PortType.CONFIG, required=False)
         ]
 
     @classmethod
@@ -38,18 +39,21 @@ class DeepONetDatasetNode(Node):
         domain = self.inputs["domain"]
         material = self.inputs["material"]
         
-        cfg = self.inputs.get("composite_dataset_config") or self.config
+        d_cfg = self.inputs.get("data_config") or self.config.data_config
+        i_cfg = self.inputs.get("input_config") or self.config.input_config
+ 
+
         
         dataset = DeepONetDataset(
             problem=problem,
             domain=domain,
             material=material,
-            n_pde=cfg.data_config.n_pde,
-            n_ic=cfg.data_config.n_ic,
-            n_bc_face=cfg.data_config.n_bc_face,
-            num_samples=cfg.data_config.num_samples,
-            num_sensors_bc=cfg.input_config.num_sensors_bc, 
-            num_sensors_ic=cfg.input_config.num_sensors_ic
+            n_pde=d_cfg.n_pde,
+            n_ic=d_cfg.n_ic,
+            n_bc_face=d_cfg.n_bc_face,
+            num_samples=d_cfg.num_samples,
+            num_sensors_bc=i_cfg.num_sensors_bc, 
+            num_sensors_ic=i_cfg.num_sensors_ic
         )
         
         return {"dataset": dataset}
