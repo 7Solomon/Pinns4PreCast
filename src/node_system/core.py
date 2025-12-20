@@ -316,6 +316,7 @@ class NodeGraph:
         #print(output_node)
         # Return requested output
         if output_node:
+            print(output_node)
             return self.nodes[output_node].get_output(output_port)
         
         return None

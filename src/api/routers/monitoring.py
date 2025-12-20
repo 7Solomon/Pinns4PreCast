@@ -1,10 +1,13 @@
 import os
 import json
 import shutil
+import glob
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/monitor", tags=["monitoring"])
+
+RUNS_DIR = "content/runs"
 
 @router.get("/status/{run_id}")
 def get_training_status(run_id: str):
@@ -40,6 +43,41 @@ def get_training_metrics(run_id: str, limit: int = 100):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading metrics: {str(e)}")
+
+@router.get("/vis/sensor/{run_id}")
+def get_sensor_data(run_id: str):
+    """
+    Returns a dictionary of all available CSV files for a run.
+    Structure:
+    {
+       "temperature": { "epoch_0.csv": "raw_csv_string", ... },
+       "alpha": { "epoch_0.csv": "raw_csv_string", ... }
+    }
+    """
+    run_path = os.path.join(RUNS_DIR, run_id)
+    if not os.path.exists(run_path):
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    result = {"temperature": {}, "alpha": {}}
+    
+    # 1. Load Temperature CSVs
+    temp_path = os.path.join(run_path, "sensors_temp")
+    if os.path.exists(temp_path):
+        for f in glob.glob(os.path.join(temp_path, "*.csv")):
+            fname = os.path.basename(f)
+            with open(f, "r") as file:
+                result["temperature"][fname] = file.read()
+
+    # 2. Load Alpha CSVs
+    alpha_path = os.path.join(run_path, "sensors_alpha")
+    if os.path.exists(alpha_path):
+        for f in glob.glob(os.path.join(alpha_path, "*.csv")):
+            fname = os.path.basename(f)
+            with open(f, "r") as file:
+                result["alpha"][fname] = file.read()
+
+    return result
+
 
 @router.get("/runs")
 def list_active_runs():
@@ -78,24 +116,3 @@ def delete_run(run_id: str):
         return {"message": f"Run '{run_id}' deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete run: {str(e)}")
-
-@router.get("/visualizations/{run_id}")
-def get_visualization_files(run_id: str):
-    run_path = f"content/runs/{run_id}"
-    if not os.path.exists(run_path):
-        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
-    
-    visualizations = {"sensors_temp": [], "sensors_alpha": [], "vtk_files": []}
-    
-    temp_dir = os.path.join(run_path, "sensors_temp")
-    alpha_dir = os.path.join(run_path, "sensors_alpha")
-    vtk_dir = os.path.join(run_path, "vtk_output")
-    
-    if os.path.exists(temp_dir):
-        visualizations["sensors_temp"] = sorted([f for f in os.listdir(temp_dir) if f.endswith('.csv')])
-    if os.path.exists(alpha_dir):
-        visualizations["sensors_alpha"] = sorted([f for f in os.listdir(alpha_dir) if f.endswith('.csv')])
-    if os.path.exists(vtk_dir):
-        visualizations["vtk_files"] = sorted([f for f in os.listdir(vtk_dir) if f.endswith('.vtk')])
-    
-    return visualizations

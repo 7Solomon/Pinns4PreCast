@@ -2,12 +2,10 @@ from lightning.pytorch.callbacks import Callback
 from pydantic import BaseModel, Field
 import torch
 import os
+from src.node_system.configs.vis import CompositeVisualizationConfig
+from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
 from src.node_system.nodes.data.function_definitions import DeepONetDataset
 from src.node_system.core import Node, NodeMetadata, PortType, Port, register_node
-
-class VisualizationConfig(BaseModel):
-    save_dir: str = Field(default="content/runs", title="Save Directory")
-    plot_every_n_epochs: int = Field(default=10, title="Plot Every n Epoch ")
 
 
 @register_node("visualization_callback")
@@ -19,7 +17,7 @@ class VisualizationCallbackNode(Node):
             Port("material", PortType.MATERIAL),
             Port("dataset_config", PortType.CONFIG, required=False),
             Port("input_config", PortType.CONFIG, required=False),
-            Port("config", PortType.CONFIG, required=False)
+            Port("vis_config", PortType.CONFIG, required=False)
         ]
 
     @classmethod
@@ -32,14 +30,17 @@ class VisualizationCallbackNode(Node):
 
     @classmethod
     def get_config_schema(cls):
-        return VisualizationConfig 
+        return CompositeVisualizationConfig 
 
     def execute(self):
         dom = self.inputs["domain"]
         mat = self.inputs["material"]
-        d_cfg = self.inputs.get("dataset_config") or self.config.dataset_config 
+        d_cfg = self.inputs.get("data_config") or self.config.data_config 
         i_cfg = self.inputs.get("input_config") or  self.config.input_config
         v_cfg =  self.inputs.get("vis_config") or  self.config.vis_config 
+
+        run_id = self.context.get("run_id")
+
 
         # Instantiate the Callback
         cb = VisualizationCallback(
@@ -48,23 +49,25 @@ class VisualizationCallbackNode(Node):
             dataset_config=d_cfg,
             model_config=i_cfg,
             save_dir=v_cfg.save_dir,
+            run_id=run_id,
             plot_every_n_epochs=v_cfg.plot_every_n_epochs
         )
         
         return {"callback": cb, "run_id": None}
 
 class VisualizationCallback(Callback):
-    def __init__(self, domain, material, dataset_config, model_config, save_dir, plot_every_n_epochs=10):
+    def __init__(self, domain, material, dataset_config, model_config, save_dir, run_id, plot_every_n_epochs=10):
         self.domain = domain
         self.material = material
         self.d_cfg = dataset_config
         self.m_cfg = model_config
         self.save_dir = save_dir
+        self.run_id = run_id
         self.every_n = plot_every_n_epochs
         
         # Create output directories immediately
-        self.sensor_temp_path = os.path.join(save_dir, "sensors_temp")
-        self.sensor_alpha_path = os.path.join(save_dir, "sensors_alpha")
+        self.sensor_temp_path = os.path.join(save_dir, run_id, "sensors_temp")
+        self.sensor_alpha_path = os.path.join(save_dir, run_id, "sensors_alpha")
         os.makedirs(self.sensor_temp_path, exist_ok=True)
         os.makedirs(self.sensor_alpha_path, exist_ok=True)
 
