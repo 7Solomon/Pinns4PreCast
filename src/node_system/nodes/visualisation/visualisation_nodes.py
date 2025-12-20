@@ -13,8 +13,8 @@ class VisualizationCallbackNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("domain", PortType.DOMAIN),
             Port("material", PortType.MATERIAL),
+            Port("domain", PortType.DOMAIN),
             Port("dataset_config", PortType.CONFIG, required=False),
             Port("input_config", PortType.CONFIG, required=False),
             Port("vis_config", PortType.CONFIG, required=False)
@@ -114,18 +114,18 @@ class VisualizationCallback(Callback):
             
             # 4. Unscale (Using scaler attached to problem via previous steps)
             # If problem has scaler attached as discussed previously:
-            scaler = pl_module.problem.scaler
+            #scaler = pl_module.problem.scaler
             
             preds_unscaled = predictions.clone()
             # T is index 0
-            preds_unscaled[:, 0] = scaler.unscale_T(predictions[:, 0]) - 273.15
+            preds_unscaled[:, 0] = self.domain.unscale_T(predictions[:, 0], self.material.Temp_ref) - 273.15
             # Alpha is index 1 (already scaled 0-1 or needs unscaling depending on your logic)
             preds_unscaled[:, 1] = predictions[:, 1] 
-
             # 5. Export
             export_sensors_to_csv(
                 preds_unscaled.cpu(), 
-                test_coords.cpu(),
+                self.domain,
+                test_coords=test_coords.cpu(),
                 sensor_temp_path=os.path.join(self.sensor_temp_path, f"epoch_{epoch}.csv"),
                 sensor_alpha_path=os.path.join(self.sensor_alpha_path, f"epoch_{epoch}.csv")
             )

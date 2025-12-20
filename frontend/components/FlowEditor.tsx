@@ -11,11 +11,13 @@ import { useFlowEditor } from '@/hooks/useFlowEditor';
 import CustomNode from './nodes/CustomNode';
 import LossCurveNode from './nodes/LossCurveNode';
 import ConfigNode from './nodes/config/ConfigNode';
+import SensorVisNode from './nodes/SensorVisNode';
 
 const nodeTypes = {
-    custom: CustomNode,
+    default: CustomNode,
     loss_curve: LossCurveNode,
-    config: ConfigNode
+    config: ConfigNode,
+    sensor_vis: SensorVisNode
 };
 
 export default function FlowEditor() {

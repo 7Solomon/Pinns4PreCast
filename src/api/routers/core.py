@@ -69,7 +69,6 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
             except ValueError as e:
                 print(f"Warning: Connection failed: {e}")
 
-        print(graph.to_dict())
         # DEFINE WRAPPER
         def protected_execute(*args, **kwargs):
             try:

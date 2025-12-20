@@ -6,7 +6,8 @@ from src.node_system.configs import (
     CompositeDatasetConfig, 
     ModelConfig, 
     CompositeModelConfig, 
-    TrainingConfig
+    TrainingConfig,
+    VisualizationConfig 
 )
 
 create_config_node(
@@ -30,12 +31,12 @@ create_config_node(
     description="Sample counts for PDE/BC/IC"
 )
 
-create_config_node(
-    config_model=CompositeDatasetConfig,
-    node_type_id="composite_dataset_gen_config",
-    display_name="Composite Generation Params",
-    description="Sample counts for PDE/BC/IC"
-)
+#create_config_node(
+#    config_model=CompositeDatasetConfig,
+#    node_type_id="composite_dataset_gen_config",
+#    display_name="Composite Generation Params",
+#    description="Sample counts for PDE/BC/IC"
+#)
 
 create_config_node(
     config_model=TrainingConfig,
@@ -52,9 +53,16 @@ create_config_node(
 )
 
 create_config_node(
-    config_model=CompositeModelConfig,
-    node_type_id="composite_model_config",
-    display_name="Composite DeepONet Architecture",
-    description="Layers, activations, Fourier features"
+    config_model=VisualizationConfig,
+    node_type_id="vis_config",
+    display_name="Visual Settings",
+    description="Save Dir, etc.."
 )
+
+#create_config_node(
+#    config_model=CompositeModelConfig,
+#    node_type_id="composite_model_config",
+#    display_name="Composite DeepONet Architecture",
+#    description="Layers, activations, Fourier features"
+#)
 

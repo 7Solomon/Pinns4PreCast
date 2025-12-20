@@ -69,3 +69,11 @@ html {
 .react-flow__minimap {
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
 }
+
+/* Override React Flow's built-in default node styling, to fix white background */
+.react-flow__node-default {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  width: auto !important;
+}

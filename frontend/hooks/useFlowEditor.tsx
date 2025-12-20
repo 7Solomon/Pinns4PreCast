@@ -10,7 +10,7 @@ import {
 import axios from 'axios';
 import { NodeData } from '@/components/nodes/CustomNode';
 
-const configList = ['dataloader_config', 'input_config', 'dataset_gen_config', 'composite_dataset_gen_config', 'training_config', 'model_config', 'composite_model_config']
+const configList = ['dataloader_config', 'input_config', 'dataset_gen_config', 'composite_dataset_gen_config', 'training_config', 'model_config', 'composite_model_config', 'vis_config']
 
 export const useFlowEditor = () => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -41,7 +41,7 @@ export const useFlowEditor = () => {
         const nodeDef = registry[type];
         if (!nodeDef) return;
         console.log(type)
-        let nodeType = 'custom';
+        let nodeType = 'default';
         if (type === 'dashboard_logger') {
             nodeType = 'loss_curve';
         } else if (configList.includes(type)) {
@@ -226,7 +226,7 @@ export const useFlowEditor = () => {
                 };
             }
 
-            let nodeType = 'custom';
+            let nodeType = 'default';
             if (n.type === 'dashboard_logger') {
                 nodeType = 'loss_curve';
             } else if (configList.includes(n.type)) {

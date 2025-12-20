@@ -3,3 +3,4 @@ from src.node_system.configs.dataset import DatasetConfig, CompositeDatasetConfi
 from src.node_system.configs.model_input import InputConfig
 from src.node_system.configs.model import ModelConfig, CompositeModelConfig
 from src.node_system.configs.training import TrainingConfig
+from src.node_system.configs.vis import VisualizationConfig
