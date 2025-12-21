@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routers import core, graphs, monitoring
+from src.api.routers import core, graphs, monitoring, websockets
 import src.node_system.registry
 
 app = FastAPI(title="PINNs Node Editor API", version="1.0")
@@ -22,3 +22,4 @@ app.add_middleware(
 app.include_router(core.router)
 app.include_router(graphs.router)
 app.include_router(monitoring.router)
+app.include_router(websockets.router)
