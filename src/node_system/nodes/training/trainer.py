@@ -1,9 +1,12 @@
 import lightning.pytorch as pl
+
 from typing import Dict, Any, List
 
 from src.node_system.session import register_session, unregister_session
 from src.node_system.configs.training import TrainingConfig
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
+
+
 
 @register_node("lightning_trainer")
 class LightningTrainerNode(Node):
@@ -63,6 +66,7 @@ class LightningTrainerNode(Node):
             else:
                 callbacks_list.append(callbacks_input)
 
+        has_checkpoint_callback = any(isinstance(cb, pl.callbacks.ModelCheckpoint) for cb in callbacks_list)
         logger = self.inputs.get("logger") or False
 
         # Create Trainer
@@ -71,7 +75,8 @@ class LightningTrainerNode(Node):
             callbacks=callbacks_list,
             logger=logger,
             accelerator=t_cfg.accelerator,
-            enable_checkpointing=bool(callbacks_list), 
+            enable_checkpointing=has_checkpoint_callback,
+            enable_progress_bar=False,
         )
 
         register_session(run_id, trainer)

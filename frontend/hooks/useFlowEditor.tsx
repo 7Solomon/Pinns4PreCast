@@ -10,7 +10,7 @@ import {
 import axios from 'axios';
 import { NodeData } from '@/components/nodes/CustomNode';
 
-const configList = ['dataloader_config', 'input_config', 'dataset_gen_config', 'composite_dataset_gen_config', 'training_config', 'model_config', 'composite_model_config', 'vis_config']
+const configList = ['dataloader_config', 'input_config', 'dataset_gen_config', 'composite_dataset_gen_config', 'training_config', 'model_config', 'composite_model_config', 'vis_config', 'logger_config', 'checkpoint_config', 'infrence_config']
 
 export const useFlowEditor = () => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -48,6 +48,8 @@ export const useFlowEditor = () => {
             nodeType = 'config'
         } else if (type === 'visualization_callback') {
             nodeType = 'sensor_vis';
+        } else if (type === 'run_id_chooser') {
+            nodeType = 'run_id_selector'
         }
 
         const newNode: Node = {
@@ -233,6 +235,8 @@ export const useFlowEditor = () => {
                 nodeType = 'config'
             } else if (n.type === 'visualization_callback') {
                 nodeType = 'sensor_vis';
+            } else if (n.type === 'run_id_chooser') {
+                nodeType = 'run_id_selector'
             }
 
             return {

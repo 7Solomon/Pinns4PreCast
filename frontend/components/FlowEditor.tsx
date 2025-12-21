@@ -12,12 +12,14 @@ import CustomNode from './nodes/CustomNode';
 import LossCurveNode from './nodes/LossCurveNode';
 import ConfigNode from './nodes/config/ConfigNode';
 import SensorVisNode from './nodes/SensorVisNode';
+import RunSelectorNode from './nodes/RunChooseNode';
 
 const nodeTypes = {
     default: CustomNode,
     loss_curve: LossCurveNode,
     config: ConfigNode,
-    sensor_vis: SensorVisNode
+    sensor_vis: SensorVisNode,
+    run_id_selector: RunSelectorNode
 };
 
 export default function FlowEditor() {
@@ -110,7 +112,7 @@ export default function FlowEditor() {
                                 }`}
                         >
                             <Square size={18} fill="currentColor" />
-                            {isStopping ? "Stopping..." : "Stop Training"}
+                            {isStopping ? "Stopping..." : "Stop"}
                         </button>
                     ) : (
                         <button
@@ -118,7 +120,7 @@ export default function FlowEditor() {
                             className="flex gap-2 items-center bg-emerald-600 text-white px-6 py-2.5 rounded-lg border border-emerald-500 shadow-2xl shadow-emerald-900/30 hover:bg-emerald-500 hover:scale-105 active:scale-95 transition-all font-semibold"
                         >
                             <Play size={18} fill="currentColor" />
-                            Run Training
+                            Run
                         </button>
                     )}
                 </div>

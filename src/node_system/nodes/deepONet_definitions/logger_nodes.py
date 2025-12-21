@@ -46,6 +46,7 @@ class DashboardLoggerNode(Node):
     def get_input_ports(cls):
         return [
             #Port("graph", PortType.ANY, description="NodeGraph instance to save"),
+            Port("logger_config", PortType.CONFIG, description="Config for logger so save dir and stuff"),
 
         ]
 
@@ -70,7 +71,7 @@ class DashboardLoggerNode(Node):
         return LoggerConfig
 
     def execute(self):
-        cfg = self.config
+        cfg = self.inputs.get("logger_config") or self.config
         
         # 1. Create/Get Run Directory
         version_name = self.context.get("run_id")

@@ -10,6 +10,9 @@ import src.node_system.nodes.physics.domain
 # import src.node_system.nodes.visualisation.loss_display_nodes # CHANGD SO NOT NEEDED
 import src.node_system.nodes.visualisation.visualisation_nodes
 import src.node_system.nodes.aggregator
+import src.node_system.nodes.inference.display_node
+import src.node_system.nodes.inference.infrence_nodes
+import src.node_system.nodes.deepONet_definitions.checkpoint_nodes
 
 
 import src.node_system.nodes.configs
