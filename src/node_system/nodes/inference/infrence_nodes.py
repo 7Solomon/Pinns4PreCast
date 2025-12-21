@@ -2,16 +2,12 @@ import torch
 import os
 from pydantic import BaseModel, Field
 
+from src.node_system.configs.infrence import CompositeInferenceConfig
+from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
+from src.node_system.nodes.visualisation.export_to_vtk import export_to_vtk_series
+from src.node_system.configs.model_input import InputConfig
+from src.node_system.nodes.data.function_definitions import DeepONetDataset
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
-from src.DeepONet.infrence_pipline import create_test_grid
-from src.DeepONet.vis import export_sensors_to_csv
-
-
-# Config for Resolution
-class InferenceConfig(BaseModel):
-    n_spatial: int = Field(15, title="Grid points per spatial axis")
-    n_time: int = Field(15, title="Grid points for time")
-    save_dir: str = Field("./results", title="Output directory")
 
     
 def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 
@@ -48,10 +44,11 @@ class DeepONetInferenceNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("model", PortType.MODEL),
+            Port("solver", PortType.SOLVER, description="Initialized LightningModule"),
             Port("domain", PortType.DOMAIN),
             Port("material", PortType.MATERIAL),                        
             Port("problem", PortType.PROBLEM),
+            Port("run_id", PortType.RUN_ID),
 
             Port("infrence_config", PortType.CONFIG, required=False),
             Port("input_config", PortType.CONFIG, required=False)
@@ -60,7 +57,7 @@ class DeepONetInferenceNode(Node):
 
     @classmethod
     def get_output_ports(cls):
-        return [Port("status", PortType.CONFIG)] # Just a success message/path
+        return [] # Just a success message/path
 
     @classmethod
     def get_metadata(cls):
@@ -68,24 +65,41 @@ class DeepONetInferenceNode(Node):
 
     @classmethod
     def get_config_schema(cls):
-        return InferenceConfig
+        return CompositeInferenceConfig
 
     def execute(self):
         # 1. Unpack Inputs
-        model = self.inputs["model"]
+        solver = self.inputs["solver"]
         domain = self.inputs["domain"]
         material = self.inputs["material"]
         problem = self.inputs["problem"]
+        run_id = self.inputs["run_id"]
         
         inf_cfg = self.inputs.get("infrence_config")
         inp_cfg = self.inputs.get("input_config")
         
-        if not inf_cfg: inf_cfg = self.config.infrence_config
-        if not inp_cfg: inp_cfg = self.config.input_config
-        raise NotImplementedError("is missing here schere")
-        # 2. Load Weights
-        # Handle the Lightning checkpoint wrapper
-        checkpoint = torch.load(os.path.join(inf_cfg.ckpt_path, 'checkpoints', dir[-1]), map_location='cpu')
+        if not inf_cfg: inf_cfg = self.config.inf_cfg
+        if not inp_cfg: inp_cfg = self.config.inp_cfg
+
+
+        ckpts_dir = os.path.join("content", "runs", run_id, "checkpoints")
+        result_dir = os.path.join("content", "runs", run_id, "results")
+        vtk_dir = os.path.join(result_dir, "vtk")
+        temp_sensor_dir =  os.path.join(result_dir, "temp_sensor")
+        alpha_sensor_dir =  os.path.join(result_dir, "alpha_sensor")
+        
+        os.makedirs(ckpts_dir, exist_ok=True)
+        os.makedirs(result_dir, exist_ok=True)
+        os.makedirs(vtk_dir, exist_ok=True)
+        os.makedirs(temp_sensor_dir, exist_ok=True)
+        os.makedirs(alpha_sensor_dir, exist_ok=True)
+
+        idx_path = os.path.join(vtk_dir, str(len(vtk_dir)))
+        temp_sensor_path = os.path.join(temp_sensor_dir, str(len(temp_sensor_dir)))
+        alpha_sensor_path = os.path.join(alpha_sensor_dir, str(len(alpha_sensor_dir)))
+
+        latest_ckpt = max(os.listdir(ckpts_dir), key=lambda x: os.path.getctime(os.path.join(ckpts_dir, x)))
+        checkpoint = torch.load(os.path.join(ckpts_dir, latest_ckpt), map_location='cpu')
         solver.load_state_dict(checkpoint['state_dict'])
 
         
@@ -99,12 +113,14 @@ class DeepONetInferenceNode(Node):
         with torch.no_grad():
             ds = DeepONetDataset(
                 problem=solver.problem,
+                domain=domain,
+                material=material,
                 n_pde=1,      # NOT NEEDED beause 
                 n_ic=1,       # NOT NEEDED
                 n_bc_face=1,  # SAME
                 num_samples=1,
-                num_sensors_bc=num_sensors_bc,
-                num_sensors_ic= num_sensors_ic
+                num_sensors_bc=inp_cfg.num_sensors_bc,
+                num_sensors_ic= inp_cfg.num_sensors_ic
             )
             
             sample = ds[0]
@@ -113,10 +129,10 @@ class DeepONetInferenceNode(Node):
 
             # BECAUSE WE LIKE STRUTURED GRID FOR CHECKING
             test_coords = create_test_grid(
-                spatial_domain=[State().domain.x, State().domain.y, State().domain.z], 
-                time_domain=State().domain.t,
-                n_spatial=n_spatial,
-                n_time=n_time
+                spatial_domain=[domain.x, domain.y, domain.z], 
+                time_domain=domain.t,
+                n_spatial=inf_cfg.n_spatial,
+                n_time=inf_cfg.n_time
             ).to(device)
 
             # batch dimension to test_coords [1, num_points, 4]
@@ -135,7 +151,7 @@ class DeepONetInferenceNode(Node):
 
             # Unscale predictions
             predictions_unscaled = predictions.clone()
-            predictions_unscaled[:, 0] = unscale_T(predictions[:, 0]) - 273.15
+            predictions_unscaled[:, 0] = domain.unscale_T(predictions[:, 0], material.Temp_ref) - 273.15
             predictions_unscaled[:, 1] = predictions[:, 1]#unscale_alpha(predictions[:, 1])
 
             print(f"\nPredictions shape: {predictions_unscaled.shape}")
@@ -151,8 +167,10 @@ class DeepONetInferenceNode(Node):
             )
             export_sensors_to_csv(
                 predictions_unscaled.cpu(), 
+                domain,
                 test_coords.cpu(),
-                idx_path=idx_path
+                sensor_temp_path=temp_sensor_path,
+                sensor_alpha_path=alpha_sensor_path
             )
 
-            return {"status": f"Saved to {cfg.save_dir}"}
+            return []

@@ -7,7 +7,10 @@ from src.node_system.configs import (
     ModelConfig, 
     CompositeModelConfig, 
     TrainingConfig,
-    VisualizationConfig 
+    VisualizationConfig,
+    LoggerConfig,
+    InferenceConfig,
+    CheckpointConfig
 )
 
 create_config_node(
@@ -58,6 +61,28 @@ create_config_node(
     display_name="Visual Settings",
     description="Save Dir, etc.."
 )
+
+create_config_node(
+    config_model=LoggerConfig,
+    node_type_id="logger_config",
+    display_name="Logger Settings",
+    description="Save Dir, etc.."
+)
+
+
+create_config_node(
+    config_model=InferenceConfig,
+    node_type_id="infrence_config",
+    display_name="Infrence Settings",
+    description="Save Dir, etc.."
+)
+create_config_node(
+    config_model=CheckpointConfig,
+    node_type_id="checkpoint_config",
+    display_name="Checkpoint Settings",
+    description="SOME STUFF."
+)
+
 
 #create_config_node(
 #    config_model=CompositeModelConfig,
