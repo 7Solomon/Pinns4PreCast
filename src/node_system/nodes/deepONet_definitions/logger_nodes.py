@@ -10,33 +10,9 @@ from lightning.pytorch.utilities import rank_zero_only
 from src.node_system.configs.logger import LoggerConfig
 from src.node_system.core import Node, NodeMetadata, Port, PortType, register_node
 
+from src.node_system.event_bus import get_event_bus, Event, EventType
+import asyncio
 
-
-#def get_new_run(save_dir: str, status_file_name: str = "status.json") -> str:
-#    """Generates a timestamp ID and initializes the run directory."""
-#    now = 
-#    timestamp_id = 
-#    pretty_date = now.strftime("%Y-%m-%d %H:%M:%S")
-#
-#    run_path = os.path.join(save_dir, timestamp_id)
-#
-#    os.makedirs(run_path, exist_ok=True)
-#    #os.makedirs(os.path.join(run_path, 'checkpoints'), exist_ok=True)
-#    #os.makedirs(os.path.join(run_path, 'vtk'), exist_ok=True)
-#
-#    # 2. Initialize Metadata
-#    initial_status = {
-#        "id": timestamp_id,
-#        "status": "initializing",
-#        "start_time": pretty_date,
-#        "epoch": 0,
-#        "loss": None
-#    }
-#        
-#    with open(os.path.join(run_path, status_file_name), 'w') as f:
-#        json.dump(initial_status, f, indent=4)
-#
-#    return timestamp_id
 
 
 
@@ -101,10 +77,13 @@ class DashboardLoggerNode(Node):
             "logger": logger,
         }
 
+
 class DashboardLogger(Logger):
-    """"
-        This is a Custome Logger that writes to a CSV file and a status JSON file for the HTML page to read from
     """
+    Logger that publishes real-time events to the event bus.
+    Frontend subscribes via WebSocket instead of polling.
+    """
+    
     def __init__(self, save_dir, version=None):
         super().__init__()
         self._save_dir = save_dir
@@ -118,24 +97,23 @@ class DashboardLogger(Logger):
         
         self.fieldnames = [
             'step', 'epoch', 'timestamp',
-            
-            # Main Losses
             'loss_physics', 'loss_bc', 'loss_ic',
             'loss', 'loss_step', 'loss_epoch',
-            
-            # NEW: Granular Physics Losses
             'loss_phys_temperature', 'loss_phys_alpha',
-            
-            # NEW: Granular BC/IC Losses
             'loss_bc_temperature', 
             'loss_ic_temperature', 'loss_ic_alpha',
-            
-            # Validation Metrics
             'val_loss_physics', 'val_loss_bc', 'val_loss_ic',
             'val_loss' 
         ]
         
+        self.event_bus = get_event_bus()
         self._update_status("initialized")
+        
+        # Publish initialization event
+        self._publish_event(EventType.TRAINING_STARTED, {
+            "status": "initialized",
+            "log_dir": self.log_dir
+        })
 
     @property
     def name(self):
@@ -158,8 +136,7 @@ class DashboardLogger(Logger):
     @rank_zero_only
     def log_metrics(self, metrics, step):
         """
-        Robustly logs metrics to CSV, handling missing keys (e.g. val during train)
-        and ensuring column order is always deterministic.
+        Log metrics to CSV AND publish event for real-time updates.
         """
         # Filter for scalars only
         row = {k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))}
@@ -169,7 +146,7 @@ class DashboardLogger(Logger):
         current_epoch = metrics.get('epoch', None)        
         current_loss = metrics.get('loss_step', metrics.get('loss_epoch', metrics.get('loss', None)))
 
-        # Determine file mode
+        # Write to CSV (for historical data)
         file_exists = os.path.isfile(self.metrics_file)
         with open(self.metrics_file, 'a', newline='') as f:
             writer = csv.DictWriter(
@@ -179,30 +156,39 @@ class DashboardLogger(Logger):
                 restval=''
             )
             
-            # Write header only once at the start
             if not file_exists:
                 writer.writeheader()
             
             writer.writerow(row)
 
-        # Update status file for the frontend polling
+        # Update status file
         self._update_status("running", epoch=current_epoch, loss=current_loss)
+        
+        # 🚀 PUBLISH EVENT - This replaces polling!
+        self._publish_event(EventType.METRICS_UPDATED, {
+            "epoch": current_epoch,
+            "step": step,
+            "metrics": row
+        })
 
     @rank_zero_only
     def finalize(self, status):
         self._update_status(status)
+        
+        # Publish completion event
+        event_type = EventType.TRAINING_COMPLETED if status == "completed" else EventType.TRAINING_STOPPED
+        self._publish_event(event_type, {"status": status})
 
     def _update_status(self, status, epoch=None, loss=None):
-
+        """Update status file (kept for historical compatibility)"""
         data = {}
         if os.path.exists(self.status_file):
             try:
                 with open(self.status_file, 'r') as f:
                     data = json.load(f)
             except:
-                pass # If file is corrupt, we start fresh, which is GUUD
+                pass
 
-        #Update fields
         data['id'] = self.version
         data['status'] = status
         data['last_update'] = time.time()
@@ -212,7 +198,6 @@ class DashboardLogger(Logger):
         if loss is not None:
             data['loss'] = float(loss)
 
-        # Atomic write
         temp = self.status_file + '.tmp'
         try:
             with open(temp, 'w') as f:
@@ -220,3 +205,29 @@ class DashboardLogger(Logger):
             os.replace(temp, self.status_file)
         except Exception as e:
             print(f"Status update failed: {e}")
+    
+    def _publish_event(self, event_type: EventType, data: dict):
+        """
+        Publish an event to the event bus.
+        Uses asyncio to handle async event publishing from sync context.
+        """
+        event = Event(
+            type=event_type,
+            run_id=self.version,
+            data=data
+        )
+        
+        # Get or create event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is running, schedule coroutine
+                asyncio.ensure_future(self.event_bus.publish(event))
+            else:
+                # If loop is not running, run until complete
+                loop.run_until_complete(self.event_bus.publish(event))
+        except RuntimeError:
+            # No event loop, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.event_bus.publish(event))

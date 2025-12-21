@@ -7,6 +7,9 @@ from src.node_system.nodes.visualisation.export_sensors import export_sensors_to
 from src.node_system.nodes.data.function_definitions import DeepONetDataset
 from src.node_system.core import Node, NodeMetadata, PortType, Port, register_node
 
+from src.node_system.event_bus import get_event_bus, Event, EventType
+import asyncio
+
 
 @register_node("visualization_callback")
 class VisualizationCallbackNode(Node):
@@ -55,8 +58,14 @@ class VisualizationCallbackNode(Node):
         
         return {"callback": cb, "run_id": None}
 
+
 class VisualizationCallback(Callback):
-    def __init__(self, domain, material, dataset_config, model_config, save_dir, run_id, plot_every_n_epochs=10):
+    """
+    Visualization callback that publishes events instead of relying on polling.
+    """
+    
+    def __init__(self, domain, material, dataset_config, model_config, 
+                 save_dir, run_id, plot_every_n_epochs=10):
         self.domain = domain
         self.material = material
         self.d_cfg = dataset_config
@@ -65,7 +74,9 @@ class VisualizationCallback(Callback):
         self.run_id = run_id
         self.every_n = plot_every_n_epochs
         
-        # Create output directories immediately
+        self.event_bus = get_event_bus()
+        
+        # Create output directories
         self.sensor_temp_path = os.path.join(save_dir, run_id, "sensors_temp")
         self.sensor_alpha_path = os.path.join(save_dir, run_id, "sensors_alpha")
         os.makedirs(self.sensor_temp_path, exist_ok=True)
@@ -81,6 +92,10 @@ class VisualizationCallback(Callback):
         pl_module.eval()
 
         with torch.no_grad():
+            # Import here to avoid circular dependency
+            from src.node_system.nodes.data.function_definitions import DeepONetDataset
+            from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
+            
             ds = DeepONetDataset(
                 problem=pl_module.problem,
                 domain=self.domain,
@@ -88,7 +103,7 @@ class VisualizationCallback(Callback):
                 n_pde=self.d_cfg.n_pde,
                 n_ic=self.d_cfg.n_ic,
                 n_bc_face=self.d_cfg.n_bc_face,
-                num_samples=1, # We only need 1 sample for vis
+                num_samples=1,
                 num_sensors_bc=self.m_cfg.num_sensors_bc,
                 num_sensors_ic=self.m_cfg.num_sensors_ic
             )
@@ -97,14 +112,11 @@ class VisualizationCallback(Callback):
             bc_target = sample['bc_sensor_values'].unsqueeze(0).to(device)
             ic_target = sample['ic_sensor_values'].unsqueeze(0).to(device)
 
-            # 2. Create Grid
             test_coords = create_test_grid(
-                spatial_domain=[self.domain.x, self.domain.y, self.domain.z], 
-                time_domain=self.domain.t,
-                n_spatial=15, n_time=15
+                spatial_domain=[self.domain.x, self.domain.y, self.domain.z],
+                time_domain=self.domain.t
             ).to(device)
 
-            # 3. Predict
             test_batch = {
                 'bc_sensor_values': bc_target,
                 'ic_sensor_values': ic_target,
@@ -112,25 +124,53 @@ class VisualizationCallback(Callback):
             }
             predictions = pl_module(test_batch).squeeze(0)
             
-            # 4. Unscale (Using scaler attached to problem via previous steps)
-            # If problem has scaler attached as discussed previously:
-            #scaler = pl_module.problem.scaler
-            
+            # Unscale
             preds_unscaled = predictions.clone()
-            # T is index 0
             preds_unscaled[:, 0] = self.domain.unscale_T(predictions[:, 0], self.material.Temp_ref) - 273.15
-            # Alpha is index 1 (already scaled 0-1 or needs unscaling depending on your logic)
-            preds_unscaled[:, 1] = predictions[:, 1] 
-            # 5. Export
+            preds_unscaled[:, 1] = predictions[:, 1]
+            
+            # Export CSV files
+            temp_file = os.path.join(self.sensor_temp_path, f"epoch_{epoch}.csv")
+            alpha_file = os.path.join(self.sensor_alpha_path, f"epoch_{epoch}.csv")
+            
             export_sensors_to_csv(
                 preds_unscaled.cpu(), 
                 self.domain,
                 test_coords=test_coords.cpu(),
-                sensor_temp_path=os.path.join(self.sensor_temp_path, f"epoch_{epoch}.csv"),
-                sensor_alpha_path=os.path.join(self.sensor_alpha_path, f"epoch_{epoch}.csv")
+                sensor_temp_path=temp_file,
+                sensor_alpha_path=alpha_file
             )
             
+            # 🚀 PUBLISH EVENT - Notify frontend that new sensor data is available
+            self._publish_event({
+                "epoch": epoch,
+                "temp_file": temp_file,
+                "alpha_file": alpha_file,
+                "message": f"Sensor data exported for epoch {epoch}"
+            })
+            
         pl_module.train()
+    
+
+    
+    def _publish_event(self, data: dict):
+        """Publish sensor data update event"""
+        event = Event(
+            type=EventType.SENSOR_DATA_UPDATED,
+            run_id=self.run_id,
+            data=data
+        )
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self.event_bus.publish(event))
+            else:
+                loop.run_until_complete(self.event_bus.publish(event))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.event_bus.publish(event))
 
 
 def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 
