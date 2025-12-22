@@ -15,17 +15,18 @@ import asyncio
 class VisualizationCallbackNode(Node):
     @classmethod
     def get_input_ports(cls):
-        return [
-            Port("material", PortType.MATERIAL),
-            Port("domain", PortType.DOMAIN),
-            Port("dataset_config", PortType.CONFIG, required=False),
-            Port("input_config", PortType.CONFIG, required=False),
-            Port("vis_config", PortType.CONFIG, required=False)
-        ]
+        return {
+            "material": Port("material", PortType.MATERIAL),
+            "domain": Port("domain", PortType.DOMAIN),
+            "dataset_config": Port("dataset_config", PortType.CONFIG, required=False),
+            "input_config": Port("input_config", PortType.CONFIG, required=False),
+            "vis_config": Port("vis_config", PortType.CONFIG, required=False)
+        }
+        
 
     @classmethod
     def get_output_ports(cls):
-        return [Port("callback", PortType.CALLBACK)] 
+        return {"callbacks": Port("callback", PortType.CALLBACK)}
 
     @classmethod
     def get_metadata(cls):
@@ -57,11 +58,10 @@ class VisualizationCallbackNode(Node):
         )
         
         return {"callback": cb, "run_id": None}
-
-
+    
 class VisualizationCallback(Callback):
     """
-    Visualization callback that publishes events instead of relying on polling.
+    Visualization callback that sends complete sensor data via WebSocket events.
     """
     
     def __init__(self, domain, material, dataset_config, model_config, 
@@ -75,12 +75,6 @@ class VisualizationCallback(Callback):
         self.every_n = plot_every_n_epochs
         
         self.event_bus = get_event_bus()
-        
-        # Create output directories
-        self.sensor_temp_path = os.path.join(save_dir, run_id, "sensors_temp")
-        self.sensor_alpha_path = os.path.join(save_dir, run_id, "sensors_alpha")
-        os.makedirs(self.sensor_temp_path, exist_ok=True)
-        os.makedirs(self.sensor_alpha_path, exist_ok=True)
 
     def on_train_epoch_end(self, trainer, pl_module):
         epoch = trainer.current_epoch
@@ -92,7 +86,6 @@ class VisualizationCallback(Callback):
         pl_module.eval()
 
         with torch.no_grad():
-            # Import here to avoid circular dependency
             from src.node_system.nodes.data.function_definitions import DeepONetDataset
             from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
             
@@ -129,29 +122,48 @@ class VisualizationCallback(Callback):
             preds_unscaled[:, 0] = self.domain.unscale_T(predictions[:, 0], self.material.Temp_ref) - 273.15
             preds_unscaled[:, 1] = predictions[:, 1]
             
-            # Export CSV files
-            temp_file = os.path.join(self.sensor_temp_path, f"epoch_{epoch}.csv")
-            alpha_file = os.path.join(self.sensor_alpha_path, f"epoch_{epoch}.csv")
-            
-            export_sensors_to_csv(
+            # Convert to CSV strings directly (no files)
+            temp_csv_data, alpha_csv_data = self._predictions_to_csv(
                 preds_unscaled.cpu(), 
-                self.domain,
-                test_coords=test_coords.cpu(),
-                sensor_temp_path=temp_file,
-                sensor_alpha_path=alpha_file
+                test_coords.cpu(),
+                self.domain
             )
             
-            # 🚀 PUBLISH EVENT - Notify frontend that new sensor data is available
+            print("DATA PREPARED FOR WEBSOCKET")
+            
             self._publish_event({
                 "epoch": epoch,
-                "temp_file": temp_file,
-                "alpha_file": alpha_file,
-                "message": f"Sensor data exported for epoch {epoch}"
+                "temp_csv": temp_csv_data,
+                "alpha_csv": alpha_csv_data,
+                "message": f"Sensor data prepared for epoch {epoch}"
             })
             
         pl_module.train()
     
-
+    def _predictions_to_csv(self, predictions, test_coords, domain):
+        """Convert predictions to CSV string format"""
+        import io
+        import pandas as pd
+        
+        # Create DataFrame with time columns and sensor data
+        df_temp = pd.DataFrame({
+            'Time_s': test_coords[:, 3].numpy() * 3600,  # Convert to seconds
+            'Time_h': test_coords[:, 3].numpy(),         # Time in hours
+        })
+        df_alpha = df_temp.copy()
+        
+        # Add sensor columns (T1_Temp -> T10_Temp, T1_Alpha -> T10_Alpha)
+        for i in range(1, 11):
+            df_temp[f'T{i}_Temp'] = predictions[:, 0].numpy()  # Temperature
+            df_alpha[f'T{i}_Alpha'] = predictions[:, 1].numpy() # Alpha
+        
+        # Convert to CSV strings
+        temp_csv_buffer = io.StringIO()
+        alpha_csv_buffer = io.StringIO()
+        df_temp.to_csv(temp_csv_buffer, index=False)
+        df_alpha.to_csv(alpha_csv_buffer, index=False)
+        
+        return temp_csv_buffer.getvalue(), alpha_csv_buffer.getvalue()
     
     def _publish_event(self, data: dict):
         """Publish sensor data update event"""
@@ -171,6 +183,7 @@ class VisualizationCallback(Callback):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(self.event_bus.publish(event))
+
 
 
 def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 

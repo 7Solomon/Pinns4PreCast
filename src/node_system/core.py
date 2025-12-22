@@ -47,6 +47,7 @@ class Port:
     required: bool = True
     default: Any = None
     description: str = ""
+    multi_input: bool = False
     
     def validate(self, value: Any) -> bool:
         """Check if value matches port type (simplified)."""
@@ -303,16 +304,38 @@ class NodeGraph:
             if context:
                 node.context = context
             
+            input_ports = node.get_input_ports()
+            if isinstance(input_ports, list): 
+                port_map = {p.name: p for p in input_ports}
+            else:
+                port_map = input_ports
+
+            # Prepare containers for multi-input ports
+            for port_name, port_def in port_map.items():
+                if port_def.multi_input:
+                     # Initialize as empty list if not already set
+                    if port_name not in node.inputs:
+                        node.inputs[port_name] = []
+
             # Set inputs from connections
             for conn in self.connections:
                 if conn.to_node == node_id:
                     from_node = self.nodes[conn.from_node]
                     value = from_node.get_output(conn.from_port)
-                    node.set_input(conn.to_port, value)
+                    
+                    # Check if target port supports multiple inputs
+                    target_port_def = port_map.get(conn.to_port)
+                    
+                    if target_port_def and target_port_def.multi_input:
+                        # Append to list
+                        if conn.to_port not in node.inputs or not isinstance(node.inputs[conn.to_port], list):
+                            node.inputs[conn.to_port] = []
+                        node.inputs[conn.to_port].append(value)
+                    else:
+                        # Standard overwrite behavior
+                        node.set_input(conn.to_port, value)
             
-            # Execute node
-            #node.execute()
-            node.process() # M
+            node.process()
         #print(output_node)
         # Return requested output
         if output_node:
