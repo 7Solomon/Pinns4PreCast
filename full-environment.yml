@@ -1,0 +1,4 @@
+name: pinns4preCastNodes
+channels:
+  - defaults
+prefix: /home/imb-user/.conda/envs/pinns4preCastNodes
