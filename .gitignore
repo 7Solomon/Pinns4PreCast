@@ -6,3 +6,5 @@ content_depr/
 .vscode/
 
 .current_state.json
+
+*/frontend/node_modules/
