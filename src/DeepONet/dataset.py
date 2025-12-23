@@ -84,24 +84,56 @@ class DeepONetDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        k_bc, phi_bc, A_bc, offset_bc = sample_random_field_params(num_features=20)   # BC MORE FEATURES
-        k_ic, phi_ic, A_ic, offset_ic = sample_random_field_params(num_features=5)  # IC LESS FEATURES
-        A_ic = A_ic * 0.2  # BEcause IC in concrete GOOD MIXED 
+        # k_bc, phi_bc, A_bc, offset_bc = sample_random_field_params(num_features=20)   # BC MORE FEATURES
+        # k_ic, phi_ic, A_ic, offset_ic = sample_random_field_params(num_features=5)  # IC LESS FEATURES
+        # A_ic = A_ic * 0.2  # BEcause IC in concrete GOOD MIXED 
 
-        bc_T_sensors_vals = scale_T(eval_random_field(self.bc_sensor_coords, k_bc, phi_bc, A_bc, offset_bc)).squeeze(-1).as_subclass(torch.Tensor)
-        ic_T_sensors_vals = scale_T(eval_random_field(self.ic_sensor_coords, k_ic, phi_ic, A_ic, offset_ic)).squeeze(-1).as_subclass(torch.Tensor)
+        # bc_T_sensors_vals = scale_T(eval_random_field(self.bc_sensor_coords, k_bc, phi_bc, A_bc, offset_bc)).squeeze(-1).as_subclass(torch.Tensor)
+        # ic_T_sensors_vals = scale_T(eval_random_field(self.ic_sensor_coords, k_ic, phi_ic, A_ic, offset_ic)).squeeze(-1).as_subclass(torch.Tensor)
 
 
-        ## DIFRENT SO THAT BC not grid but Random so that model learns 
-        bc_loss_pts = LabelTensor.cat([ 
-            self.problem.domain[face].sample(n=self.n_bc_face) 
+        # ## DIFRENT SO THAT BC not grid but Random so that model learns 
+        # bc_loss_pts = LabelTensor.cat([ 
+        #     self.problem.domain[face].sample(n=self.n_bc_face) 
+        #     for face in self.boundary_faces
+        # ])
+        # bc_T_target_vals = scale_T(eval_random_field(bc_loss_pts, k_bc, phi_bc, A_bc, offset_bc)).squeeze(-1).as_subclass(torch.Tensor)
+
+        # ic_loss_pts = self.problem.domain["initial"].sample(n=self.n_ic)
+        # ic_T_target_vals = scale_T(eval_random_field(ic_loss_pts, k_ic, phi_ic, A_ic, offset_ic)).squeeze(-1).as_subclass(torch.Tensor)
+        # ic_target_alpha_vals = (torch.ones_like(ic_T_target_vals) * 1e-6).as_subclass(torch.Tensor)
+
+        # --- CONSTANT IC/BC (no randomness) ---
+        T_ic_const = torch.tensor(State().material.Temp_ref)  # e.g. 298.15 K
+        T_bc_const = torch.tensor(State().material.Temp_ref)  # same as IC; change if you want
+
+        # Sensor values (branch inputs) - constant vectors
+        bc_T_sensors_vals = scale_T(
+            torch.full((self.bc_sensor_coords.shape[0],), T_bc_const, dtype=torch.float32)
+        ).as_subclass(torch.Tensor)
+
+        ic_T_sensors_vals = scale_T(
+            torch.full((self.ic_sensor_coords.shape[0],), T_ic_const, dtype=torch.float32)
+        ).as_subclass(torch.Tensor)
+
+        # Loss points (still sampled, but targets are constant at those points)
+        bc_loss_pts = LabelTensor.cat([
+            self.problem.domain[face].sample(n=self.n_bc_face)
             for face in self.boundary_faces
         ])
-        bc_T_target_vals = scale_T(eval_random_field(bc_loss_pts, k_bc, phi_bc, A_bc, offset_bc)).squeeze(-1).as_subclass(torch.Tensor)
+        bc_T_target_vals = scale_T(
+            torch.full((bc_loss_pts.shape[0],), T_bc_const, dtype=torch.float32)
+        ).as_subclass(torch.Tensor)
 
         ic_loss_pts = self.problem.domain["initial"].sample(n=self.n_ic)
-        ic_T_target_vals = scale_T(eval_random_field(ic_loss_pts, k_ic, phi_ic, A_ic, offset_ic)).squeeze(-1).as_subclass(torch.Tensor)
+        ic_T_target_vals = scale_T(
+            torch.full((ic_loss_pts.shape[0],), T_ic_const, dtype=torch.float32)
+        ).as_subclass(torch.Tensor)
+
+        # Alpha IC stays constant (already in your code)
         ic_target_alpha_vals = (torch.ones_like(ic_T_target_vals) * 1e-6).as_subclass(torch.Tensor)
+        # --- end constant IC/BC ---
+        ############################### ##########################################
 
         pde_pts = self.problem.domain["D"].sample(n=self.n_pde)
 
