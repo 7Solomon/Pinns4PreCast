@@ -10,10 +10,14 @@ class FlexDeepONet(nn.Module):
         as well as 2 outputs (Temperature and Hydration Degree).
     """
 
-    def __init__(self, branch_configs, trunk_config, num_outputs=2, latent_dim=256, activation=None, fourier_features=None):
+    #def __init__(self, branch_configs, trunk_config, num_outputs=2, latent_dim=256, activation=None, fourier_features=None):
+    def __init__(self, branch_configs, trunk_config, num_outputs=2, latent_dim=256, activation=None, fourier_features=None, alpha_max=1.0):
+
         super().__init__()
         self.num_outputs = num_outputs
         self.latent_dim = latent_dim
+        self.alpha_max = float(alpha_max) # To scale the output of alpha to [0, alpha_max]
+
 
         if isinstance(activation, dict):
             branch_act = activation.get('branch', nn.Tanh)
@@ -94,6 +98,13 @@ class FlexDeepONet(nn.Module):
         branch_combined = branch_combined.unsqueeze(1).unsqueeze(-1)
         product = trunk_output * branch_combined
         output = product.sum(dim=2)
+
+        # Enforce physical bounds on alpha (output[..., 1])
+        raw_T = output[..., 0]
+        raw_alpha = output[..., 1]
+
+        alpha = self.alpha_max * torch.sigmoid(raw_alpha)  # alpha in [0, alpha_max]
+        output = torch.stack([raw_T, alpha], dim=-1)
         
         return output
 

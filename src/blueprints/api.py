@@ -44,7 +44,8 @@ def define_flex_model():
         num_outputs=State().config.model.num_outputs,
         latent_dim=State().config.model.latent_dim,
         activation=State().config.model.activation,
-        fourier_features=State().config.model.fourier_features
+        fourier_features=State().config.model.fourier_features,
+        alpha_max=State().material.deg_hydr_max
     )
     problem = HeatODE()
     
