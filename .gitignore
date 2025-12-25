@@ -1,7 +1,7 @@
 */__pycache__/
 *__pycache__/
 content/
-!content/tree_templates/Complete.json
+!content/tree_templates/Training.json
 !content/tree_templates/Inference.json
 node_modules/
 package-lock.json

@@ -1,12 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Activity, Database, TrendingUp, Clock, Zap, Eye } from 'lucide-react';
-
-
-// Mock hook - replace with actual implementation
-const useMonitoringWebSocket = ({ runId, onMetricsUpdate }: any) => {
-    const [isConnected, setIsConnected] = React.useState(false);
-    return { isConnected };
-};
+import { useMonitoringWebSocket } from '@/hooks/useMonitoringWebSocket';
+import LossChart from './monitoring/LossCurve';
+import SensorVisualization, { SensorData } from './monitoring/SensorVisualisation';
 
 interface RunInfo {
     run_id: string;
@@ -20,12 +16,40 @@ export default function MonitoringDashboard() {
     const [selectedRun, setSelectedRun] = useState<string | null>(null);
     const [runs, setRuns] = useState<RunInfo[]>([]);
     const [metricsData, setMetricsData] = useState<any[]>([]);
+    const [latestSensorData, setLatestSensorData] = useState<SensorData | null>(null);
 
-    // WebSocket connection for real-time updates
-    const { isConnected } = useMonitoringWebSocket({
-        runId: selectedRun,
-        onMetricsUpdate: (metrics: any) => {
-            setMetricsData(prev => [...prev, metrics]);
+    // ✅ FIXED: Smart merge for full history + live updates
+    const { isConnected, disconnect } = useMonitoringWebSocket({
+        runId: selectedRun || null,
+        onMetricsUpdate: useCallback((newData: any) => {
+            console.log('📊 Metrics received:', newData);
+
+            setMetricsData(prev => {
+                // Full history array? REPLACE everything
+                if (Array.isArray(newData) && newData.length > 1) {
+                    console.log(`📈 Full history: ${newData.length} points`);
+                    return newData;
+                }
+
+                // Single live point? Append if newer
+                if (!Array.isArray(newData)) {
+                    const newPoint = newData;
+                    const lastStep = prev[prev.length - 1]?.step || 0;
+                    if (newPoint.step > lastStep) {
+                        console.log(`➕ Live: step ${newPoint.step}`);
+                        return [...prev, newPoint];
+                    }
+                }
+
+                return prev; // Duplicate, ignore
+            });
+        }, []),
+        onSensorUpdate: (data) => {
+            console.log('Sensor update:', data);
+            setLatestSensorData(data);
+        },
+        onStatusChange: (status) => {
+            console.log('Status:', status);
         }
     });
 
@@ -33,7 +57,8 @@ export default function MonitoringDashboard() {
     React.useEffect(() => {
         fetch('http://localhost:8000/monitor/runs')
             .then(res => res.json())
-            .then(data => setRuns(data.runs || []));
+            .then(data => setRuns(data.runs || []))
+            .catch(err => console.error('Failed to fetch runs:', err));
     }, []);
 
     const activeRuns = useMemo(() =>
@@ -48,7 +73,6 @@ export default function MonitoringDashboard() {
 
     return (
         <div className="w-full h-screen bg-slate-950 flex overflow-hidden">
-
             {/* LEFT SIDEBAR: Run List */}
             <div className="w-80 border-r border-slate-800 bg-slate-900 flex flex-col">
                 <div className="p-4 border-b border-slate-800">
@@ -108,9 +132,14 @@ export default function MonitoringDashboard() {
                                 <div>
                                     <h3 className="text-lg font-bold text-white">{selectedRun}</h3>
                                     <div className="flex items-center gap-4 mt-1">
-                                        <span className={`text-xs px-2 py-1 rounded ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-slate-800 text-slate-500'
+                                        <span className={`text-xs px-2 py-1 rounded ${isConnected
+                                            ? 'bg-green-500/20 text-green-400'
+                                            : 'bg-slate-800 text-slate-500'
                                             }`}>
                                             {isConnected ? '● Live' : '○ Historical'}
+                                        </span>
+                                        <span className="text-xs text-slate-400 font-mono">
+                                            {metricsData.length} metrics points
                                         </span>
                                     </div>
                                 </div>
@@ -119,61 +148,28 @@ export default function MonitoringDashboard() {
 
                         {/* Visualization Grid */}
                         <div className="flex-1 p-4 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                            {/* Loss Curve */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                    <TrendingUp size={16} className="text-blue-400" />
-                                    Training Loss
-                                </h4>
-                                <div className="h-64 flex items-center justify-center text-slate-600">
-                                    {metricsData.length > 0 ? (
-                                        <div>Chart with {metricsData.length} points</div>
-                                    ) : (
-                                        <div>No metrics data yet</div>
-                                    )}
-                                </div>
+                            {/* Loss Curve - Full width */}
+                            <div className="lg:col-span-2">
+                                <LossChart
+                                    data={metricsData}
+                                    runId={selectedRun}
+                                    isConnected={isConnected}
+                                />
                             </div>
 
                             {/* Sensor Data */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 lg:col-span-2">
                                 <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
                                     <Eye size={16} className="text-cyan-400" />
                                     Sensor Data
                                 </h4>
-                                <div className="h-64 flex items-center justify-center text-slate-600">
-                                    Sensor visualization
-                                </div>
+                                <SensorVisualization
+                                    sensorData={latestSensorData}
+                                    epoch={latestSensorData?.epoch || metricsData[metricsData.length - 1]?.epoch || null}
+                                />
                             </div>
 
-                            {/* Metrics Table */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 lg:col-span-2">
-                                <h4 className="text-sm font-bold text-white mb-3">Metrics History</h4>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
-                                        <thead>
-                                            <tr className="text-slate-500 border-b border-slate-800">
-                                                <th className="text-left p-2">Epoch</th>
-                                                <th className="text-left p-2">Loss</th>
-                                                <th className="text-left p-2">Physics</th>
-                                                <th className="text-left p-2">BC</th>
-                                                <th className="text-left p-2">IC</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {metricsData.slice(-10).map((m, i) => (
-                                                <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                                                    <td className="p-2 text-slate-300">{m.epoch}</td>
-                                                    <td className="p-2 text-slate-300">{m.loss?.toFixed(4)}</td>
-                                                    <td className="p-2 text-slate-400">{m.loss_physics?.toFixed(4)}</td>
-                                                    <td className="p-2 text-slate-400">{m.loss_bc?.toFixed(4)}</td>
-                                                    <td className="p-2 text-slate-400">{m.loss_ic?.toFixed(4)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+
                         </div>
                     </>
                 ) : (
@@ -194,8 +190,8 @@ function RunCard({ run, isSelected, onClick }: any) {
         <button
             onClick={onClick}
             className={`w-full text-left p-3 rounded-lg mb-2 transition-all ${isSelected
-                    ? 'bg-blue-500/20 border border-blue-500/50'
-                    : 'bg-slate-800 border border-slate-700 hover:border-slate-600'
+                ? 'bg-blue-500/20 border border-blue-500/50'
+                : 'bg-slate-800 border border-slate-700 hover:border-slate-600'
                 }`}
         >
             <div className="flex items-start justify-between mb-1">
@@ -203,8 +199,8 @@ function RunCard({ run, isSelected, onClick }: any) {
                     {run.run_id.split('_').pop()}
                 </span>
                 <span className={`text-[10px] px-2 py-0.5 rounded ${run.status === 'running'
-                        ? 'bg-green-500/20 text-green-400'
-                        : 'bg-slate-700 text-slate-400'
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-slate-700 text-slate-400'
                     }`}>
                     {run.status}
                 </span>

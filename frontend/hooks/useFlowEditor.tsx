@@ -42,15 +42,16 @@ export const useFlowEditor = () => {
         if (!nodeDef) return;
         console.log(type)
         let nodeType = 'default';
-        if (type === 'dashboard_logger') {
-            nodeType = 'loss_curve';
-        } else if (configList.includes(type)) {
+        if (configList.includes(type)) {
             nodeType = 'config'
-        } else if (type === 'visualization_callback') {
-            nodeType = 'sensor_vis';
         } else if (type === 'run_id_chooser') {
             nodeType = 'run_id_selector'
         }
+        //else if (type === 'visualization_callback') {
+        //    nodeType = 'sensor_vis';
+        //} else if (type === 'dashboard_logger') {
+        //    nodeType = 'loss_curve';
+        //}
 
         const newNode: Node = {
             id: `${type}-${Date.now()}`,
@@ -229,15 +230,16 @@ export const useFlowEditor = () => {
             }
 
             let nodeType = 'default';
-            if (n.type === 'dashboard_logger') {
-                nodeType = 'loss_curve';
-            } else if (configList.includes(n.type)) {
+            if (configList.includes(n.type)) {
                 nodeType = 'config'
-            } else if (n.type === 'visualization_callback') {
-                nodeType = 'sensor_vis';
             } else if (n.type === 'run_id_chooser') {
                 nodeType = 'run_id_selector'
             }
+            //else if (n.type === 'visualization_callback') {
+            //    nodeType = 'sensor_vis';
+            //} else if (n.type === 'dashboard_logger') {
+            //    nodeType = 'loss_curve';
+            //}
 
             return {
                 id: n.id,

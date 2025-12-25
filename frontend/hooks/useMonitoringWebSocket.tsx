@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'; // ✅ Added useMemo import
 
 type EventType =
   | 'connection_established'
@@ -6,8 +6,10 @@ type EventType =
   | 'training_epoch_end'
   | 'training_completed'
   | 'training_stopped'
-  | 'metrics_updated'
-  | 'sensor_data_updated'
+  | 'metrics_history'
+  | 'metrics_updates_since'
+  | 'sensor_data_history'
+  | 'sensor_data_since'
   | 'checkpoint_saved'
   | 'run_status_changed';
 
@@ -33,7 +35,7 @@ export function useMonitoringWebSocket({
   onSensorUpdate,
   onStatusChange,
   autoReconnect = true,
-  reconnectInterval = 3000
+  reconnectInterval = 5000
 }: UseMonitoringWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<MonitoringEvent | null>(null);
@@ -41,29 +43,63 @@ export function useMonitoringWebSocket({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
 
+  const metricLocalStorageKey = useMemo(() => `metrics_${runId}`, [runId]);
+  const sensorLocalStorageKey = useMemo(() => `sensors_${runId}`, [runId]);
+
+  const getCachedMetrics = (key: string): any[] => {
+    try {
+      const cached = localStorage.getItem(key);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const cacheMetrics = (metrics: any[], key: string) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(metrics));
+    } catch { }
+  };
+
   const connect = useCallback(() => {
     if (!runId || !mountedRef.current) return;
 
-    // Close existing connection
+    if (wsRef.current && [0, 1].includes(wsRef.current.readyState)) {
+      console.log(`[WebSocket] Already connected/connecting, skipping`);
+      return;
+    }
+
     if (wsRef.current) {
-      wsRef.current.close();
+      wsRef.current.close(1000, 'Reconnecting');
+      wsRef.current = null;
     }
 
     console.log(`[WebSocket] Connecting to run: ${runId}`);
-
     const ws = new WebSocket(`ws://localhost:8000/ws/monitor/${runId}`);
 
     ws.onopen = () => {
       console.log(`[WebSocket] Connected to run: ${runId}`);
       setIsConnected(true);
 
-      // Start heartbeat to keep connection alive
+      const cachedMetrics = getCachedMetrics(metricLocalStorageKey);
+      if (cachedMetrics.length > 0) {
+        console.log(`[Cache] Restored ${cachedMetrics.length} metrics instantly`);
+        onMetricsUpdate?.(cachedMetrics);
+      }
+
+      const lastStep = cachedMetrics[cachedMetrics.length - 1]?.step || 0;
+      ws.send(JSON.stringify({
+        type: 'request_history_since',
+        run_id: runId,
+        last_step: lastStep
+      }));
+
+      // Heartbeat
       const heartbeat = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'ping' }));
         }
-      }, 30000); // Ping every 30 seconds
-
+      }, 30000);
       (ws as any)._heartbeat = heartbeat;
     };
 
@@ -72,14 +108,31 @@ export function useMonitoringWebSocket({
         const data: MonitoringEvent = JSON.parse(event.data);
         setLastEvent(data);
 
-        // Route to appropriate callback
         switch (data.type) {
-          case 'metrics_updated':
+          case 'metrics_history':
+            console.log(`[WS] History: ${data.data.length} points`);
+            cacheMetrics(data.data, metricLocalStorageKey);
             onMetricsUpdate?.(data.data);
             break;
 
-          case 'sensor_data_updated':
+          case 'metrics_updates_since':
+            console.log(`[WS] Updates: ${data.data.length} new points`);
+            onMetricsUpdate?.(data.data);
+            break;
+
+          case 'sensor_data_history':
+            console.log(`[WS] Sensor History: ${data.data.length} points`);
+            cacheMetrics(data.data, sensorLocalStorageKey);
+            onSensorUpdate?.(data.data);  // ✅ FIXED: onSensorUpdate
+            break;
+
+          case 'sensor_data_since':
+            console.log(`[WS] Sensor Updates: ${data.data.length} points`);
             onSensorUpdate?.(data.data);
+            break;
+
+          case 'metrics_updates_since':
+            onMetricsUpdate?.(data.data);
             break;
 
           case 'training_completed':
@@ -93,47 +146,46 @@ export function useMonitoringWebSocket({
     };
 
     ws.onerror = (error) => {
-      console.error('[WebSocket] Error:', error);
+      console.error('[WebSocket] Error details:', {
+        url: ws.url,
+        readyState: ws.readyState,
+        error
+      });
     };
 
-    ws.onclose = () => {
-      console.log(`[WebSocket] Disconnected from run: ${runId}`);
+    ws.onclose = (event) => {
+      console.log(`[WebSocket] Disconnected from run: ${runId}`, event.code, event.reason);
       setIsConnected(false);
 
-      // Clear heartbeat
       if ((ws as any)._heartbeat) {
         clearInterval((ws as any)._heartbeat);
       }
 
-      // Auto-reconnect if enabled
-      if (autoReconnect && mountedRef.current) {
-        console.log(`[WebSocket] Reconnecting in ${reconnectInterval}ms...`);
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, reconnectInterval);
+      if (autoReconnect && mountedRef.current &&
+        event.code !== 1000 &&
+        wsRef.current === ws &&
+        runId === ws.url.split('/').pop()) {
+        console.log(`[WebSocket] Scheduling reconnect...`);
+        reconnectTimeoutRef.current = setTimeout(connect, reconnectInterval);
       }
     };
 
     wsRef.current = ws;
-  }, [runId, onMetricsUpdate, onSensorUpdate, onStatusChange, autoReconnect, reconnectInterval]);
+  }, [runId, onMetricsUpdate, onSensorUpdate, onStatusChange, autoReconnect, reconnectInterval, metricLocalStorageKey, sensorLocalStorageKey]);
 
   useEffect(() => {
+    if (!runId) return;
     mountedRef.current = true;
-
-    if (runId) {
-      connect();
-    }
+    connect();
 
     return () => {
       mountedRef.current = false;
-
-      // Cleanup
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close(1000, 'Unmounting');
+        wsRef.current = null;
       }
     };
   }, [runId, connect]);
@@ -151,5 +203,3 @@ export function useMonitoringWebSocket({
     reconnect: connect
   };
 }
-
-

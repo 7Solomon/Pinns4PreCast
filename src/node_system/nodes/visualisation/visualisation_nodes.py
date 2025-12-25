@@ -1,6 +1,7 @@
 from lightning.pytorch.callbacks import Callback
 from pydantic import BaseModel, Field
 import torch
+import pandas as pd
 import os
 from src.node_system.configs.vis import CompositeVisualizationConfig
 from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
@@ -45,7 +46,7 @@ class VisualizationCallbackNode(Node):
         run_id = self.context.get("run_id")
 
 
-        # Instantiate the Callback
+        # Instantiate the Callback  
         cb = VisualizationCallback(
             domain=dom,
             material=mat,
@@ -92,7 +93,7 @@ class VisualizationCallback(Callback):
         pl_module.eval()
 
         with torch.no_grad():
-            # Import here to avoid circular dependency
+            # ✅ YOUR EXISTING INFERENCE - PERFECT!
             from src.node_system.nodes.data.function_definitions import DeepONetDataset
             from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
             
@@ -129,28 +130,55 @@ class VisualizationCallback(Callback):
             preds_unscaled[:, 0] = self.domain.unscale_T(predictions[:, 0], self.material.Temp_ref) - 273.15
             preds_unscaled[:, 1] = predictions[:, 1]
             
-            # Export CSV files
             temp_file = os.path.join(self.sensor_temp_path, f"epoch_{epoch}.csv")
             alpha_file = os.path.join(self.sensor_alpha_path, f"epoch_{epoch}.csv")
             
             export_sensors_to_csv(
-                preds_unscaled.cpu(), 
+                preds_unscaled.cpu().numpy(),
                 self.domain,
-                test_coords=test_coords.cpu(),
+                test_coords=test_coords.cpu().numpy(),
                 sensor_temp_path=temp_file,
                 sensor_alpha_path=alpha_file
             )
             
-            # 🚀 PUBLISH EVENT - Notify frontend that new sensor data is available
+            sensor_data = self._csv_to_recharts_format(temp_file, alpha_file)
+            
             self._publish_event({
                 "epoch": epoch,
-                "temp_file": temp_file,
-                "alpha_file": alpha_file,
-                "message": f"Sensor data exported for epoch {epoch}"
+                "data": sensor_data,  # Full array: [{"step": 0, "T_sensor1": 23.5, "alpha_sensor1": 0.1}, ...]
+                "message": f"Sensor data for epoch {epoch}"
             })
             
         pl_module.train()
-    
+
+        
+    def _csv_to_recharts_format(self, temp_file: str, alpha_file: str) -> list:
+        """Convert your CSV format to Recharts time-series"""
+        # Read your CSV headers
+        df_temp = pd.read_csv(temp_file)
+        df_alpha = pd.read_csv(alpha_file)
+        
+        # Merge on Time_s
+        df = pd.merge(df_temp, df_alpha, on=['Time_s', 'Time_h'], suffixes=('_temp', '_alpha'))
+        
+        # Convert to Recharts format
+        recharts_data = []
+        for _, row in df.iterrows():
+            step_data = {
+                "step": int(row['Time_s']),  # Use Time_s as step
+                "time_hours": float(row['Time_h'])
+            }
+            
+            # Add all sensors
+            for col in df.columns:
+                if col.endswith('_Temp') or col.endswith('_Alpha'):
+                    step_data[col] = float(row[col])
+            
+            recharts_data.append(step_data)
+        
+        return recharts_data
+
+        
 
     
     def _publish_event(self, data: dict):
