@@ -1,3 +1,4 @@
+import math
 import os
 import json
 import time
@@ -139,7 +140,14 @@ class DashboardLogger(Logger):
         Log metrics to CSV AND publish event for real-time updates.
         """
         # Filter for scalars only
-        row = {k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))}
+        row = {}
+        for k, v in metrics.items():
+            if isinstance(v, (int, float)):
+                if math.isnan(v) or math.isinf(v):
+                    row[k] = None
+                else:
+                    row[k] = float(v)
+
         row['step'] = step
         row['timestamp'] = time.time()
 

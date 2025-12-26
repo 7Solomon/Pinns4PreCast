@@ -8,6 +8,7 @@ type EventType =
   | 'training_stopped'
   | 'metrics_history'
   | 'metrics_updates_since'
+  | 'metrics_updated'
   | 'sensor_data_history'
   | 'sensor_data_since'
   | 'checkpoint_saved'
@@ -120,10 +121,17 @@ export function useMonitoringWebSocket({
             onMetricsUpdate?.(data.data);
             break;
 
+          case 'metrics_updated':
+            if (data.data && data.data.metrics) {
+              console.log(`[WS] Live Update (Step ${data.data.step})`);
+              onMetricsUpdate?.(data.data.metrics);
+            }
+            break;
+
           case 'sensor_data_history':
             console.log(`[WS] Sensor History: ${data.data.length} points`);
             cacheMetrics(data.data, sensorLocalStorageKey);
-            onSensorUpdate?.(data.data);  // ✅ FIXED: onSensorUpdate
+            onSensorUpdate?.(data.data);
             break;
 
           case 'sensor_data_since':
@@ -131,15 +139,12 @@ export function useMonitoringWebSocket({
             onSensorUpdate?.(data.data);
             break;
 
-          case 'metrics_updates_since':
-            onMetricsUpdate?.(data.data);
-            break;
-
           case 'training_completed':
           case 'training_stopped':
             onStatusChange?.(data.data.status);
             break;
         }
+
       } catch (error) {
         console.error('[WebSocket] Error parsing message:', error);
       }

@@ -1,85 +1,109 @@
-$ErrorActionPreference = "Stop"
-$CONDA_ENV_NAME = "pinns4preCastNodes"
-$BACKEND_PORT = 8000
-$FRONTEND_PORT = 3000
+#!/bin/bash
 
-# Global cleanup
-$script:BackendProcess = $null
-$script:FrontendProcess = $null
+# --- Configuration ---
+CONDA_ENV_NAME="pinns4preCastNodes"
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
 
-function Cleanup {
-    Write-Host "`n🛑 Stopping services..." -ForegroundColor Red
-    if ($script:BackendProcess) { Stop-Process -Id $script:BackendProcess.Id -Force -ErrorAction SilentlyContinue }
-    if ($script:FrontendProcess) { Stop-Process -Id $script:FrontendProcess.Id -Force -ErrorAction SilentlyContinue }
-    Write-Host "✅ Services stopped" -ForegroundColor Green
+# --- Colors ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# --- Cleanup Trap ---
+cleanup() {
+    echo -e "\n${RED}Stopping services...${NC}"
+    if [ -n "$BACKEND_PID" ]; then kill $BACKEND_PID 2>/dev/null || true; fi
+    if [ -n "$FRONTEND_PID" ]; then kill $FRONTEND_PID 2>/dev/null || true; fi
+    echo -e "${GREEN}Services stopped.${NC}"
+}
+trap cleanup EXIT INT TERM
+
+# --- Helper: Clear Ports ---
+check_and_clear_port() {
+    local PORT=$1
+    local PID=$(lsof -t -i:$PORT)
+    if [ -n "$PID" ]; then
+        echo -e "${YELLOW}Port $PORT is in use by PID $PID. Killing it...${NC}"
+        kill -9 $PID
+        sleep 1
+    fi
 }
 
-# Trap Ctrl+C
-Register-EngineEvent PowerShell.Exiting -Action { Cleanup }
+echo -e "${CYAN}Starting PINNs4PreCast (Linux)...${NC}"
 
-Write-Host "🚀 Starting PINNs4PreCast (PowerShell Edition)..." -ForegroundColor Cyan
+# 1. Activate Conda
+echo -e "${YELLOW}Activating Conda...${NC}"
+# Attempt standard locations
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || \
+source ~/anaconda3/etc/profile.d/conda.sh 2>/dev/null || \
+eval "$(conda shell.bash hook)"
 
-# Activate conda
-conda activate $CONDA_ENV_NAME
-Write-Host "✅ Conda: $CONDA_ENV_NAME activated" -ForegroundColor Green
+if ! conda activate $CONDA_ENV_NAME; then
+    echo -e "${RED}ERROR: Could not activate conda environment '$CONDA_ENV_NAME'${NC}"
+    echo -e "Check if the environment exists with: conda env list"
+    exit 1
+fi
 
-# Check ports
-Write-Host "🔍 Checking ports..." -ForegroundColor Yellow
-$ports = @($BACKEND_PORT, $FRONTEND_PORT)
-foreach ($port in $ports) {
-    $listener = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-    if ($listener) {
-        Write-Host "❌ Port $port in use by PID $($listener.OwningProcess)" -ForegroundColor Red
+# 2. Clear Ports
+check_and_clear_port $BACKEND_PORT
+check_and_clear_port $FRONTEND_PORT
+
+# 3. Start Backend
+echo -e "\n${GREEN}[1/2] Starting Backend...${NC}"
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port $BACKEND_PORT --log-level warning &
+BACKEND_PID=$!
+sleep 2 # Short wait to check for immediate crash
+
+if ! kill -0 $BACKEND_PID 2>/dev/null; then
+    echo -e "${RED}ERROR: Backend failed to start!${NC}"
+    exit 1
+fi
+echo -e "${GREEN}Backend PID: $BACKEND_PID${NC}"
+
+# 4. Start Frontend
+echo -e "\n${GREEN}[2/2] Starting Frontend...${NC}"
+if [ ! -d "frontend" ]; then
+    echo -e "${RED}ERROR: 'frontend' folder not found!${NC}"
+    exit 1
+fi
+
+cd frontend
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+     echo -e "${RED}ERROR: 'node_modules' missing in frontend/ folder.${NC}"
+     echo -e "${YELLOW}Running 'npm install' for you...${NC}"
+     npm install
+     if [ $? -ne 0 ]; then
+        echo -e "${RED}npm install failed.${NC}"
         exit 1
-    }
-}
-Write-Host "✅ Ports available" -ForegroundColor Green
+     fi
+fi
 
-# === BACKEND ===
-Write-Host "`n🐍 [1/2] Starting Backend..." -ForegroundColor Green
-$script:BackendProcess = Start-Process -FilePath "uvicorn" -ArgumentList @(
-    "src.api.main:app", 
-    "--host", "0.0.0.0", 
-    "--port", "$BACKEND_PORT", 
-    "--log-level", "debug"
-) -PassThru -NoNewWindow
+# Start npm
+npm run dev -- --port $FRONTEND_PORT &
+FRONTEND_PID=$!
+cd ..
 
-Start-Sleep 3
-if ($script:BackendProcess.HasExited) {
-    Write-Host "❌ Backend failed (PID $($script:BackendProcess.Id))" -ForegroundColor Red
+# CRITICAL: Wait and verify it didn't crash immediately
+echo -e "${YELLOW}Verifying Frontend startup...${NC}"
+sleep 4
+
+if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+    echo -e "${RED}ERROR: Frontend crashed immediately!${NC}"
+    echo -e "Most likely cause: 'next' command not found or syntax error."
+    echo -e "Try running manually: cd frontend && npm run dev"
+    # Kill backend since we are aborting
+    kill $BACKEND_PID
     exit 1
-}
-Write-Host "✅ Backend PID: $($script:BackendProcess.Id)" -ForegroundColor Green
+fi
 
-# === FRONTEND ===
-Write-Host "`n⚛️ [2/2] Starting Frontend..." -ForegroundColor Green
-if (-not (Test-Path "frontend")) {
-    Write-Host "❌ frontend/ missing. Run: cd frontend && npm install" -ForegroundColor Red
-    exit 1
-}
+# 5. Success
+echo -e "\n${CYAN}PINNs4PreCast LIVE!${NC}"
+echo -e "${GREEN}  Backend:  http://localhost:$BACKEND_PORT/docs${NC}"
+echo -e "${GREEN}  Frontend: http://localhost:$FRONTEND_PORT${NC}"
+echo -e "${YELLOW}  Press Ctrl+C to stop${NC}"
 
-$script:FrontendProcess = Start-Process -FilePath "powershell" -ArgumentList @(
-    "-NoExit", 
-    "-Command", 
-    "cd frontend; npm run dev -- -p $FRONTEND_PORT"
-) -PassThru -WindowStyle Normal
-
-Start-Sleep 3
-if ($script:FrontendProcess.HasExited) {
-    Write-Host "❌ Frontend failed. Run: cd frontend && npm install && npm run dev" -ForegroundColor Red
-    exit 1
-}
-Write-Host "✅ Frontend PID: $($script:FrontendProcess.Id)" -ForegroundColor Green
-
-Write-Host "`n🎉 PINNs4PreCast LIVE!" -ForegroundColor Cyan
-Write-Host "   🐍 Backend:  http://localhost:$BACKEND_PORT/docs" -ForegroundColor Green
-Write-Host "   ⚛️  Frontend: http://localhost:$FRONTEND_PORT" -ForegroundColor Green
-Write-Host "   💥 Ctrl+C to stop everything" -ForegroundColor Yellow
-
-# Wait forever (both processes run until Ctrl+C)
-while ($true) {
-    Start-Sleep 1
-    if ($script:BackendProcess.HasExited) { Write-Host "⚠️ Backend exited!" -ForegroundColor Red; break }
-    if ($script:FrontendProcess.HasExited) { Write-Host "⚠️ Frontend exited!" -ForegroundColor Yellow }
-}
-Cleanup
+wait $BACKEND_PID $FRONTEND_PID

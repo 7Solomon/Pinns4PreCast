@@ -1,5 +1,6 @@
 import asyncio
 import os
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.node_system.event_bus import get_event_bus
@@ -37,23 +38,19 @@ async def websocket_monitor(websocket: WebSocket, run_id: str):
                 if message.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
                 
-                # ✅ FULL HISTORY REQUEST - send ALL data since last_step
                 elif message.get("type") == "request_history_since":
                     last_step = message.get("last_step", 0)
                     
                     metrics_path = f"content/runs/{run_id}/metrics.csv"
                     if os.path.exists(metrics_path):
                         df = pd.read_csv(metrics_path)
-                        # NO LIMIT - send ALL newer points
                         recent_df = df[df['step'] > last_step]
-                        metrics = recent_df.fillna('').to_dict('records')
-                        
-                        console.log(f"[WS] Sending {len(metrics)} metrics since step {last_step}")
+                        metrics = recent_df.replace({np.nan: None}).to_dict('records')
                         
                         await websocket.send_json({
                             "type": "metrics_updates_since",
                             "run_id": run_id,
-                            "data": metrics  # Full array of new points
+                            "data": metrics
                         })
                     else:
                         await websocket.send_json({

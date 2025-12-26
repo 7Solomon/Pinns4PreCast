@@ -9,17 +9,13 @@ import Sidebar from "./Sidebar";
 import FlowCanvas from "./FlowCanvas";
 import { useFlowEditor } from "@/hooks/useFlowEditor";
 import CustomNode from "./nodes/CustomNode";
-import LossCurveNode from "./nodes/LossCurveNode";
 import ConfigNode from "./nodes/config/ConfigNode";
-import SensorVisNode from "./nodes/SensorVisNode";
 import RunSelectorNode from "./nodes/RunChooseNode";
 import MonitoringDashboard from "./MonitoringDashboard";
 
 const nodeTypes = {
     default: CustomNode,
-    loss_curve: LossCurveNode,
     config: ConfigNode,
-    sensor_vis: SensorVisNode,
     run_id_selector: RunSelectorNode,
 };
 
@@ -96,8 +92,8 @@ export default function FlowEditor() {
                         <button
                             onClick={() => setActiveTab("editor")}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "editor"
-                                    ? "bg-slate-700 text-white shadow"
-                                    : "text-slate-400 hover:text-white hover:bg-slate-700/60"
+                                ? "bg-slate-700 text-white shadow"
+                                : "text-slate-400 hover:text-white hover:bg-slate-700/60"
                                 }`}
                         >
                             Editor
@@ -105,8 +101,8 @@ export default function FlowEditor() {
                         <button
                             onClick={() => setActiveTab("monitor")}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "monitor"
-                                    ? "bg-emerald-500/90 text-white shadow"
-                                    : "text-slate-400 hover:text-white hover:bg-slate-700/60"
+                                ? "bg-emerald-500/90 text-white shadow"
+                                : "text-slate-400 hover:text-white hover:bg-slate-700/60"
                                 }`}
                         >
                             Monitor
@@ -141,8 +137,8 @@ export default function FlowEditor() {
                                     onClick={handleStop}
                                     disabled={isStopping}
                                     className={`flex gap-2 items-center px-6 py-2.5 rounded-lg shadow-2xl transition-all font-semibold ${isStopping
-                                            ? "bg-red-800 text-red-200 border border-red-700 cursor-not-allowed"
-                                            : "bg-red-600 text-white border border-red-500 hover:bg-red-500 hover:scale-105 active:scale-95 animate-pulse"
+                                        ? "bg-red-800 text-red-200 border border-red-700 cursor-not-allowed"
+                                        : "bg-red-600 text-white border border-red-500 hover:bg-red-500 hover:scale-105 active:scale-95 animate-pulse"
                                         }`}
                                 >
                                     <Square size={18} fill="currentColor" />

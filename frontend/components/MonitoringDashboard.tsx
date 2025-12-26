@@ -18,39 +18,51 @@ export default function MonitoringDashboard() {
     const [metricsData, setMetricsData] = useState<any[]>([]);
     const [latestSensorData, setLatestSensorData] = useState<SensorData | null>(null);
 
-    // ✅ FIXED: Smart merge for full history + live updates
+    const handleSensorUpdate = useCallback((data: any) => {
+        console.log('Sensor update:', data);
+        setLatestSensorData(data);
+    }, []);
+
+    const handleStatusChange = useCallback((status: string) => {
+        console.log('Status:', status);
+    }, []);
+
+    const handleMetricsChange = useCallback((incomingData: any) => {
+        setMetricsData(prev => {
+            // 1. Normalize everything to an array
+            const newPoints = Array.isArray(incomingData) ? incomingData : [incomingData];
+
+            if (newPoints.length === 0) return prev;
+
+            // 2. Performance Optimization: If we have no data yet, just set it
+            if (prev.length === 0) {
+                return newPoints.sort((a: any, b: any) => a.step - b.step);
+            }
+
+            const dataMap = new Map(prev.map((p: any) => [p.step, p]));
+
+            let hasChanges = false;
+            newPoints.forEach((p: any) => {
+                // Only update if the point is new or different
+                if (!dataMap.has(p.step)) {
+                    dataMap.set(p.step, p);
+                    hasChanges = true;
+                }
+            });
+
+            if (!hasChanges) return prev;
+
+            // 4. Return sorted array
+            return Array.from(dataMap.values()).sort((a: any, b: any) => a.step - b.step);
+        });
+    }, []);
+
+
     const { isConnected, disconnect } = useMonitoringWebSocket({
         runId: selectedRun || null,
-        onMetricsUpdate: useCallback((newData: any) => {
-            console.log('📊 Metrics received:', newData);
-
-            setMetricsData(prev => {
-                // Full history array? REPLACE everything
-                if (Array.isArray(newData) && newData.length > 1) {
-                    console.log(`📈 Full history: ${newData.length} points`);
-                    return newData;
-                }
-
-                // Single live point? Append if newer
-                if (!Array.isArray(newData)) {
-                    const newPoint = newData;
-                    const lastStep = prev[prev.length - 1]?.step || 0;
-                    if (newPoint.step > lastStep) {
-                        console.log(`➕ Live: step ${newPoint.step}`);
-                        return [...prev, newPoint];
-                    }
-                }
-
-                return prev; // Duplicate, ignore
-            });
-        }, []),
-        onSensorUpdate: (data) => {
-            console.log('Sensor update:', data);
-            setLatestSensorData(data);
-        },
-        onStatusChange: (status) => {
-            console.log('Status:', status);
-        }
+        onMetricsUpdate: handleMetricsChange,
+        onSensorUpdate: handleSensorUpdate,
+        onStatusChange: handleStatusChange
     });
 
     // Fetch available runs on mount
@@ -65,6 +77,12 @@ export default function MonitoringDashboard() {
         runs.filter(r => r.status === 'running'),
         [runs]
     );
+
+    const initializedRuns = useMemo(() =>
+        runs.filter(r => r.status === 'initialized'),
+        [runs]
+    );
+
 
     const completedRuns = useMemo(() =>
         runs.filter(r => r.status === 'completed'),
