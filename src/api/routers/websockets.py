@@ -1,20 +1,27 @@
 import asyncio
 import os
-
 import pandas as pd
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.node_system.event_bus import get_event_bus
 import json
 
+
 router = APIRouter(prefix="/ws", tags=["websocket"])
+
 
 @router.websocket("/monitor/{run_id}")
 async def websocket_monitor(websocket: WebSocket, run_id: str):
+    """
+    WebSocket endpoint for monitoring a specific training run.
+    Handles history requests + live event bus updates.
+    """
+    event_bus = get_event_bus()
+    
     try:
         await websocket.accept()
-        event_bus = get_event_bus()
         event_bus.register_websocket(run_id, websocket)
 
+        # Send connection confirmation
         await websocket.send_json({
             "type": "connection_established",
             "run_id": run_id,
@@ -30,51 +37,63 @@ async def websocket_monitor(websocket: WebSocket, run_id: str):
                 if message.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
                 
+                # ✅ FULL HISTORY REQUEST - send ALL data since last_step
                 elif message.get("type") == "request_history_since":
                     last_step = message.get("last_step", 0)
                     
-                    # MAYBE HERE SMARTER
                     metrics_path = f"content/runs/{run_id}/metrics.csv"
                     if os.path.exists(metrics_path):
                         df = pd.read_csv(metrics_path)
-                        # Filter step > last_step
+                        # NO LIMIT - send ALL newer points
                         recent_df = df[df['step'] > last_step]
                         metrics = recent_df.fillna('').to_dict('records')
+                        
+                        console.log(f"[WS] Sending {len(metrics)} metrics since step {last_step}")
+                        
+                        await websocket.send_json({
+                            "type": "metrics_updates_since",
+                            "run_id": run_id,
+                            "data": metrics  # Full array of new points
+                        })
                     else:
-                        metrics = []
-                    
-                    await websocket.send_json({
-                        "type": "metrics_updates_since",
-                        "run_id": run_id,
-                        "data": metrics
-                    })
+                        await websocket.send_json({
+                            "type": "metrics_updates_since",
+                            "run_id": run_id,
+                            "data": []
+                        })
                 
             except asyncio.TimeoutError:
                 await websocket.send_json({"type": "ping"})
             except WebSocketDisconnect:
                 break
+            except json.JSONDecodeError:
+                print(f"[WS] Invalid JSON from {run_id}")
+            except Exception as e:
+                print(f"[WS] Error processing message for {run_id}: {e}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": str(e)
+                })
                 
     except Exception as e:
-        print(f"WebSocket error for run {run_id}: {e}")
+        print(f"WebSocket setup failed for {run_id}: {e}")
     finally:
         event_bus.unregister_websocket(run_id, websocket)
         print(f"WebSocket disconnected for run: {run_id}")
 
 
-
 @router.websocket("/monitor-all")
 async def websocket_monitor_all(websocket: WebSocket):
     """
-    Monitor ALL active runs.
-    Useful for a dashboard showing multiple runs.
+    Monitor ALL active runs using wildcard subscription.
+    Useful for dashboard showing multiple runs.
     """
-    await websocket.accept()
     event_bus = get_event_bus()
     
-    # Register for all runs using wildcard
-    event_bus.register_websocket("*", websocket)
-    
     try:
+        await websocket.accept()
+        event_bus.register_websocket("*", websocket)
+        
         await websocket.send_json({
             "type": "connection_established",
             "message": "Connected to all runs monitoring"
@@ -90,7 +109,36 @@ async def websocket_monitor_all(websocket: WebSocket):
                     
             except WebSocketDisconnect:
                 break
+            except json.JSONDecodeError:
+                print("[WS-ALL] Invalid JSON")
+            except Exception as e:
+                print(f"[WS-ALL] Error: {e}")
+                
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"[WS-ALL] Setup failed: {e}")
     finally:
         event_bus.unregister_websocket("*", websocket)
+        print("WebSocket monitor-all disconnected")
+
+
+@router.get("/ws/test/{run_id}")
+async def test_history_endpoint(run_id: str, last_step: int = 0):
+    """
+    HTTP endpoint to test the WebSocket history logic.
+    Returns same data as WebSocket request_history_since.
+    """
+    metrics_path = f"content/runs/{run_id}/metrics.csv"
+    if not os.path.exists(metrics_path):
+        return {"error": "Metrics file not found", "data": []}
+    
+    df = pd.read_csv(metrics_path)
+    recent_df = df[df['step'] > last_step]
+    metrics = recent_df.fillna('').to_dict('records')
+    
+    return {
+        "success": True,
+        "total_records": len(df),
+        "records_since": len(metrics),
+        "last_step": last_step,
+        "data": metrics
+    }

@@ -164,11 +164,12 @@ class DashboardLogger(Logger):
         # Update status file
         self._update_status("running", epoch=current_epoch, loss=current_loss)
         
+        # 🚀 PUBLISH EVENT - This replaces polling!
         self._publish_event(EventType.METRICS_UPDATED, {
-        **row,
-        "epoch": current_epoch,
-        "step": step
-    })
+            "epoch": current_epoch,
+            "step": step,
+            "metrics": row
+        })
 
     @rank_zero_only
     def finalize(self, status):

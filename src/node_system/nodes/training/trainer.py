@@ -22,7 +22,7 @@ class LightningTrainerNode(Node):
             "dataloader": Port("dataloader", PortType.DATALOADER, required=True, description="Train DataLoader"),
             "val_dataloader": Port("val_dataloader", PortType.DATALOADER, required=False, description="Validation DataLoader"),
             
-            "callbacks": Port("callbacks", PortType.CALLBACK, required=False, multi_input=True),
+            "callbacks": Port("callbacks", PortType.CALLBACK, required=False),
             "logger": Port("logger", PortType.LOGGER, required=False),
             
             "training_config": Port("training_config", PortType.CONFIG, required=False)
@@ -68,7 +68,7 @@ class LightningTrainerNode(Node):
 
         has_checkpoint_callback = any(isinstance(cb, pl.callbacks.ModelCheckpoint) for cb in callbacks_list)
         logger = self.inputs.get("logger") or False
-        
+
         # Create Trainer
         trainer = pl.Trainer(
             max_epochs=t_cfg.max_epochs,

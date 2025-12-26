@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #020617;
+  /* slate-950 solid background */
+}
+
+/* Custom scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0f172a;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+  border: 2px solid #0f172a;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Button styles for consistency */
+.btn-green {
+  @apply flex gap-2 items-center bg-emerald-600 text-white px-6 py-2.5 rounded-lg shadow-lg shadow-emerald-900/30 hover:bg-emerald-500 transition-all hover:scale-105 active:scale-95 font-semibold;
+}
+
+.btn-red {
+  @apply flex gap-2 items-center bg-red-600 text-white px-6 py-2.5 rounded-lg shadow-lg shadow-red-900/30 hover:bg-red-500 transition-all hover:scale-105 active:scale-95 font-semibold;
+}
+
+/* React Flow overrides for better visibility */
+.react-flow {
+  background: #020617 !important;
+}
+
+.react-flow__node {
+  z-index: 10;
+}
+
+.react-flow__edge {
+  z-index: 5;
+}
+
+/* Ensure modals are always on top */
+[role="dialog"] {
+  z-index: 9999 !important;
+}
+
+/* Fix for ReactFlow controls */
+.react-flow__controls {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+}
+
+.react-flow__minimap {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+}
+
+/* Override React Flow's built-in default node styling, to fix white background */
+.react-flow__node-default {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  width: auto !important;
+}

@@ -1,6 +1,7 @@
 from lightning.pytorch.callbacks import Callback
 from pydantic import BaseModel, Field
 import torch
+import pandas as pd
 import os
 from src.node_system.configs.vis import CompositeVisualizationConfig
 from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
@@ -15,18 +16,17 @@ import asyncio
 class VisualizationCallbackNode(Node):
     @classmethod
     def get_input_ports(cls):
-        return {
-            "material": Port("material", PortType.MATERIAL),
-            "domain": Port("domain", PortType.DOMAIN),
-            "dataset_config": Port("dataset_config", PortType.CONFIG, required=False),
-            "input_config": Port("input_config", PortType.CONFIG, required=False),
-            "vis_config": Port("vis_config", PortType.CONFIG, required=False)
-        }
-        
+        return [
+            Port("material", PortType.MATERIAL),
+            Port("domain", PortType.DOMAIN),
+            Port("dataset_config", PortType.CONFIG, required=False),
+            Port("input_config", PortType.CONFIG, required=False),
+            Port("vis_config", PortType.CONFIG, required=False)
+        ]
 
     @classmethod
     def get_output_ports(cls):
-        return {"callbacks": Port("callback", PortType.CALLBACK)}
+        return [Port("callback", PortType.CALLBACK)] 
 
     @classmethod
     def get_metadata(cls):
@@ -46,7 +46,7 @@ class VisualizationCallbackNode(Node):
         run_id = self.context.get("run_id")
 
 
-        # Instantiate the Callback
+        # Instantiate the Callback  
         cb = VisualizationCallback(
             domain=dom,
             material=mat,
@@ -58,10 +58,11 @@ class VisualizationCallbackNode(Node):
         )
         
         return {"callback": cb, "run_id": None}
-    
+
+
 class VisualizationCallback(Callback):
     """
-    Visualization callback that sends complete sensor data via WebSocket events.
+    Visualization callback that publishes events instead of relying on polling.
     """
     
     def __init__(self, domain, material, dataset_config, model_config, 
@@ -75,6 +76,12 @@ class VisualizationCallback(Callback):
         self.every_n = plot_every_n_epochs
         
         self.event_bus = get_event_bus()
+        
+        # Create output directories
+        self.sensor_temp_path = os.path.join(save_dir, run_id, "sensors_temp")
+        self.sensor_alpha_path = os.path.join(save_dir, run_id, "sensors_alpha")
+        os.makedirs(self.sensor_temp_path, exist_ok=True)
+        os.makedirs(self.sensor_alpha_path, exist_ok=True)
 
     def on_train_epoch_end(self, trainer, pl_module):
         epoch = trainer.current_epoch
@@ -86,6 +93,7 @@ class VisualizationCallback(Callback):
         pl_module.eval()
 
         with torch.no_grad():
+            # ✅ YOUR EXISTING INFERENCE - PERFECT!
             from src.node_system.nodes.data.function_definitions import DeepONetDataset
             from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
             
@@ -122,48 +130,56 @@ class VisualizationCallback(Callback):
             preds_unscaled[:, 0] = self.domain.unscale_T(predictions[:, 0], self.material.Temp_ref) - 273.15
             preds_unscaled[:, 1] = predictions[:, 1]
             
-            # Convert to CSV strings directly (no files)
-            temp_csv_data, alpha_csv_data = self._predictions_to_csv(
-                preds_unscaled.cpu(), 
-                test_coords.cpu(),
-                self.domain
+            temp_file = os.path.join(self.sensor_temp_path, f"epoch_{epoch}.csv")
+            alpha_file = os.path.join(self.sensor_alpha_path, f"epoch_{epoch}.csv")
+            
+            export_sensors_to_csv(
+                preds_unscaled.cpu().numpy(),
+                self.domain,
+                test_coords=test_coords.cpu().numpy(),
+                sensor_temp_path=temp_file,
+                sensor_alpha_path=alpha_file
             )
             
-            print("DATA PREPARED FOR WEBSOCKET")
+            sensor_data = self._csv_to_recharts_format(temp_file, alpha_file)
             
             self._publish_event({
                 "epoch": epoch,
-                "temp_csv": temp_csv_data,
-                "alpha_csv": alpha_csv_data,
-                "message": f"Sensor data prepared for epoch {epoch}"
+                "data": sensor_data,  # Full array: [{"step": 0, "T_sensor1": 23.5, "alpha_sensor1": 0.1}, ...]
+                "message": f"Sensor data for epoch {epoch}"
             })
             
         pl_module.train()
-    
-    def _predictions_to_csv(self, predictions, test_coords, domain):
-        """Convert predictions to CSV string format"""
-        import io
-        import pandas as pd
+
         
-        # Create DataFrame with time columns and sensor data
-        df_temp = pd.DataFrame({
-            'Time_s': test_coords[:, 3].numpy() * 3600,  # Convert to seconds
-            'Time_h': test_coords[:, 3].numpy(),         # Time in hours
-        })
-        df_alpha = df_temp.copy()
+    def _csv_to_recharts_format(self, temp_file: str, alpha_file: str) -> list:
+        """Convert your CSV format to Recharts time-series"""
+        # Read your CSV headers
+        df_temp = pd.read_csv(temp_file)
+        df_alpha = pd.read_csv(alpha_file)
         
-        # Add sensor columns (T1_Temp -> T10_Temp, T1_Alpha -> T10_Alpha)
-        for i in range(1, 11):
-            df_temp[f'T{i}_Temp'] = predictions[:, 0].numpy()  # Temperature
-            df_alpha[f'T{i}_Alpha'] = predictions[:, 1].numpy() # Alpha
+        # Merge on Time_s
+        df = pd.merge(df_temp, df_alpha, on=['Time_s', 'Time_h'], suffixes=('_temp', '_alpha'))
         
-        # Convert to CSV strings
-        temp_csv_buffer = io.StringIO()
-        alpha_csv_buffer = io.StringIO()
-        df_temp.to_csv(temp_csv_buffer, index=False)
-        df_alpha.to_csv(alpha_csv_buffer, index=False)
+        # Convert to Recharts format
+        recharts_data = []
+        for _, row in df.iterrows():
+            step_data = {
+                "step": int(row['Time_s']),  # Use Time_s as step
+                "time_hours": float(row['Time_h'])
+            }
+            
+            # Add all sensors
+            for col in df.columns:
+                if col.endswith('_Temp') or col.endswith('_Alpha'):
+                    step_data[col] = float(row[col])
+            
+            recharts_data.append(step_data)
         
-        return temp_csv_buffer.getvalue(), alpha_csv_buffer.getvalue()
+        return recharts_data
+
+        
+
     
     def _publish_event(self, data: dict):
         """Publish sensor data update event"""
@@ -183,7 +199,6 @@ class VisualizationCallback(Callback):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(self.event_bus.publish(event))
-
 
 
 def create_test_grid(spatial_domain=[(0, 1),(0, 1),(0, 1)], time_domain=(0, 1), 
