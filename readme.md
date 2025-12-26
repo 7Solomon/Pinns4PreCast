@@ -25,7 +25,7 @@ The editor starts as a clean slate where you can begin composing your experiment
 ### 2. Node Selection & Graph Design
 Construct your pipeline by dragging nodes from the sidebar registry. Nodes are categorized by function (Data Loading, Model Architecture, Training Config, etc.).
 
-<img src="assets/node_selection.png" width="400" alt="Node Selection">
+<img src="assets/node_selection.png" width="200" alt="Node Selection">
 
 ### 3. Constructing a Training Tree
 Connect nodes to define the flow of data and configuration. This example shows a complete training tree setup for a simulation, linking inputs to models and loggers.
@@ -35,19 +35,19 @@ Connect nodes to define the flow of data and configuration. This example shows a
 ### 4. Configuration Management
 Click on any **Config Node** to open the inspector form. Here you can fine-tune hyperparameters, file paths, and physical constants without touching code.
 
-<img src="assets/config_edit.png" width="500" alt= "Configs">
+<img src="assets/config_edit.png" width="300" alt= "Configs">
 
 
 ### 5. Project Controls
 Use the control panel to **Run** simulations, **Save** your current graph to the database, or **Load** previous experiments. The system handles background execution locks to prevent conflicts.
 
-<img src="assets/option_buttons.png" width="400" alt="Action Buttons">
+<img src="assets/option_buttons.png" width="300" alt="Action Buttons">
 
 
 ### 6. Loading Experiments
 The Load dialog allows you to browse saved graphs, viewing metadata like tags and descriptions before importing them into the canvas.
 
-<img src="assets/loading_screen.png" width="400">
+<img src="assets/loading_screen.png" width="300">
 
 
 ### 7. Real-Time Monitoring
@@ -56,7 +56,7 @@ Switch to the **Monitor Tab** to watch your training in action.
 *   **History:** Browse metrics from past completed runs.
 *   **Visualizations:** View live Loss Curves and Sensor Data heatmaps (updated via WebSockets).
 
-<img src="assets/monitoring_tab.png" width="400" alt="Monitoring Tab">
+<img src="assets/monitoring_tab.png" width="600" alt="Monitoring Tab">
 
 
 ---
