@@ -21,6 +21,61 @@ export const useFlowEditor = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
+    // HELPER FUNCTIONS
+    const updateLossCurve = useCallback((runId: string | null) => {
+        setNodes(nds => nds.map(node => {
+            if (node.type === 'loss_curve') {
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        config: { ...(node.data.config || {}), run_id: runId }
+                    }
+                };
+            }
+            return node;
+        }));
+    }, [setNodes]);
+
+    const updateSensorVis = useCallback((runId: string | null) => {
+        setNodes(nds => nds.map(node => {
+            if (node.type === 'sensor_vis') {
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        config: { ...(node.data.config || {}), run_id: runId }
+                    }
+                };
+            }
+            return node;
+        }));
+    }, [setNodes]);
+
+    // 2. RESTORE STATE ON MOUNT
+    // Checks if the backend is already running a session when page loads
+    useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                const res = await axios.get('http://localhost:8000/execute/status');
+
+                if (res.data.is_running && res.data.run_id) {
+                    console.log(`🔄 Restored active run from backend: ${res.data.run_id}`);
+
+                    setIsRunning(true);
+                    setCurrentRunId(res.data.run_id);
+
+                    // CRITICAL: Tell the nodes about the active run so they connect via WS
+                    //updateLossCurve(res.data.run_id);
+                    //updateSensorVis(res.data.run_id);
+                }
+            } catch (e) {
+                console.error("Failed to check execution status", e);
+            }
+        };
+        checkStatus();
+    }, [updateLossCurve, updateSensorVis]); // Dependencies ensure helpers are ready
+
     // Load Registry
     useEffect(() => {
         axios.get<NodeData[]>('http://localhost:8000/registry')
@@ -29,37 +84,30 @@ export const useFlowEditor = () => {
                 res.data.forEach((n: any) => {
                     reg[n.type] = n;
                 });
-                console.log('Registry loaded with types:', Object.keys(reg));
                 setRegistry(reg);
             })
-            .catch(err => {
-                console.error('Failed to load registry:', err);
-            });
+            .catch(err => console.error('Failed to load registry:', err));
     }, []);
 
     const addNode = useCallback((type: string) => {
         const nodeDef = registry[type];
         if (!nodeDef) return;
-        console.log(type)
+
         let nodeType = 'default';
         if (configList.includes(type)) {
             nodeType = 'config'
         } else if (type === 'run_id_chooser') {
             nodeType = 'run_id_selector'
+        } else if (type === 'visualization_callback') {
+            nodeType = 'sensor_vis';
+        } else if (type === 'dashboard_logger') {
+            nodeType = 'loss_curve';
         }
-        //else if (type === 'visualization_callback') {
-        //    nodeType = 'sensor_vis';
-        //} else if (type === 'dashboard_logger') {
-        //    nodeType = 'loss_curve';
-        //}
 
         const newNode: Node = {
             id: `${type}-${Date.now()}`,
             type: nodeType,
-            position: {
-                x: Math.random() * 400 + 200,
-                y: Math.random() * 400 + 100
-            },
+            position: { x: Math.random() * 400 + 200, y: Math.random() * 400 + 100 },
             data: { ...nodeDef, type }
         };
         setNodes((nds) => nds.concat(newNode));
@@ -78,16 +126,14 @@ export const useFlowEditor = () => {
 
     // --- API ACTIONS ---
 
-
     const runSimulation = async () => {
         if (isRunning) {
             console.warn("Run already in progress, ignoring.");
             return;
         }
-        console.log(" runSimulation called");
 
         setIsRunning(true);
-        setCurrentRunId(null); // Reset previous run
+        setCurrentRunId(null);
 
         const payload = {
             nodes: nodes.map(n => ({
@@ -107,76 +153,46 @@ export const useFlowEditor = () => {
 
         try {
             const res = await axios.post('http://localhost:8000/execute', payload);
-
             const runId = res.data.run_id;
 
             if (runId) {
-                setCurrentRunId(runId); // Store ID so we can stop it later
-                updateLossCurve(runId);
-                updateSensorVis(runId)
+                setCurrentRunId(runId);
+                //updateLossCurve(runId);
+                //updateSensorVis(runId);
             }
             console.log(`Started Run ID: ${runId}`);
 
         } catch (e: any) {
             alert(`Error: ${e.response?.data?.detail || e.message}`);
             setIsRunning(false);
+            // Cleanup on fail
+            //updateLossCurve(null);
+            //updateSensorVis(null);
         }
     };
 
     const stopSimulation = async () => {
-        if (!currentRunId || !isRunning) return;
+        // Fallback: If local state is empty but we think it's running, try to get ID from backend check
+        // For now, we rely on currentRunId being restored by useEffect on mount.
+        if (!currentRunId && !isRunning) return;
 
         try {
-            const res = await axios.post(`http://localhost:8000/execute/stop/${currentRunId}`);
-            alert("Training stopping... (It may take a few seconds to finish the current epoch)");
-            //setCurrentRunId(res.data.run_id);
+            const targetId = currentRunId || "unknown";
+            await axios.post(`http://localhost:8000/execute/stop/${targetId}`);
+
+            alert("Stop signal sent.");
+
             setIsRunning(false);
-            updateLossCurve(null)
-            updateSensorVis(null)
-            setCurrentRunId(null)
+            setCurrentRunId(null);
+
+            // Stop visualizing on the nodes
+            //updateLossCurve(null);
+            //updateSensorVis(null);
+
         } catch (e) {
             console.error("Failed to stop:", e);
         }
     };
-
-    const updateLossCurve = async (runId: string | null) => {
-        setNodes(nds => nds.map(node => {
-            if (node.type === 'loss_curve') {
-                console.log(`Updating Loss Curve ${node.id} with Run ID:`, runId); // Debug Log
-                return {
-                    ...node,
-                    data: {
-                        ...node.data,
-                        config: {
-                            ...(node.data.config || {}),
-                            run_id: runId
-                        }
-                    }
-                };
-            }
-            return node;
-        }));
-    };
-
-    const updateSensorVis = async (runId: string | null) => {
-        setNodes(nds => nds.map(node => {
-            if (node.type === 'sensor_vis') {
-                console.log(`Updating Sensor vis ${node.id} with Run ID:`, runId); // Debug Log
-                return {
-                    ...node,
-                    data: {
-                        ...node.data,
-                        config: {
-                            ...(node.data.config || {}),
-                            run_id: runId
-                        }
-                    }
-                };
-            }
-            return node;
-        }));
-    };
-
 
     const saveGraph = async (name: string, description: string, tags: string[], overwrite: boolean) => {
         const payload = {
@@ -197,49 +213,30 @@ export const useFlowEditor = () => {
             })),
             overwrite
         };
-
         const res = await axios.post('http://localhost:8000/graphs/save', payload);
         return res.data;
     };
 
     const loadGraph = (graphData: any) => {
-        // Clear current graph
         setNodes([]);
         setEdges([]);
-        console.log(graphData)
-        // Load nodes with validation against registry
+
         const loadedNodes = graphData.nodes.map((n: any) => {
             const nodeDef = registry[n.type];
-
             if (!nodeDef) {
-                console.error(`Missing node type "${n.type}" in registry. Available:`, Object.keys(registry));
-                // Return a placeholder node
                 return {
                     id: n.id,
                     type: 'custom',
                     position: n.position,
-                    data: {
-                        label: `[Missing: ${n.type}]`,
-                        category: 'Unknown',
-                        inputs: {},
-                        outputs: {},
-                        type: n.type,
-                        config: n.config
-                    }
+                    data: { label: `[Missing: ${n.type}]`, type: n.type, config: n.config }
                 };
             }
 
             let nodeType = 'default';
-            if (configList.includes(n.type)) {
-                nodeType = 'config'
-            } else if (n.type === 'run_id_chooser') {
-                nodeType = 'run_id_selector'
-            }
-            //else if (n.type === 'visualization_callback') {
-            //    nodeType = 'sensor_vis';
-            //} else if (n.type === 'dashboard_logger') {
-            //    nodeType = 'loss_curve';
-            //}
+            if (configList.includes(n.type)) nodeType = 'config';
+            else if (n.type === 'run_id_chooser') nodeType = 'run_id_selector';
+            else if (n.type === 'visualization_callback') nodeType = 'sensor_vis';
+            else if (n.type === 'dashboard_logger') nodeType = 'loss_curve';
 
             return {
                 id: n.id,
@@ -275,7 +272,7 @@ export const useFlowEditor = () => {
         stopSimulation,
         saveGraph,
         loadGraph,
-        setNodes, // exposed in case you need direct access
+        setNodes,
         setEdges
     };
 };

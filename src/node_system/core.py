@@ -315,10 +315,12 @@ class NodeGraph:
             node.process() # M
         #print(output_node)
         # Return requested output
-        if output_node:
+        if output_node == 'unknown':
+            raise Warning("Not handele correctly BUt dont know the pipiline currently if no output should not be set unknown but rahther handeled Diffrent")
+            return None
+        if output_node :
             return self.nodes[output_node].get_output(output_port)
         
-        return None
     
     def save_to_file(self, filepath: str, metadata: dict = None):
         """

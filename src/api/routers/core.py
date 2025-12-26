@@ -1,6 +1,6 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-import src.node_system.session as session_state 
+from src.state import app_state
 from src.node_system.core import NodeGraph, NodeRegistry
 from src.api.models import GraphExecutionPayload
 from src.api.utils import port_to_dict, get_config_schema_json
@@ -10,6 +10,7 @@ router = APIRouter(tags=["core"])
 @router.get("/")
 def health_check():
     return {"status": "running", "nodes_registered": len(NodeRegistry._nodes)}
+
 
 @router.get("/registry")
 def get_node_registry():
@@ -36,18 +37,25 @@ def get_node_registry():
 
     return registry_data
 
+@router.get("/execute/status")
+def get_execution_status():
+    return {
+        "is_running": app_state.is_running,
+        "run_id": app_state.current_run_id
+    }
+
 @router.post("/execute")
 async def execute_graph(payload: GraphExecutionPayload, background_tasks: BackgroundTasks):
     
-    if session_state.EXECUTION_LOCK:
-        raise HTTPException(status_code=409, detail="A training session is already running/queued.")
-    print("🔒 Acquiring Execution Lock")
-    session_state.EXECUTION_LOCK = True
+    if app_state.is_running:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"A training session ({app_state.current_run_id}) is already active."
+        )
 
     try:
-        print(f"Received execution request...")
         run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        print(f"Assigning Run ID: {run_id}")
+        app_state.register_session(run_id, trainer=None)
 
         global_context = {
             "run_id": run_id,
@@ -73,9 +81,13 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
         def protected_execute(*args, **kwargs):
             try:
                 graph.execute(*args, **kwargs)
+            except Exception as e:
+                print(f"❌ Execution failed: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
-                print("🔓 Releasing Execution Lock (Task Finished)")
-                session_state.EXECUTION_LOCK = False
+                print(f"🔓 Execution finished. Clearing session {run_id}")
+                app_state.clear_session(run_id)
 
         # FIRE AND FORGET
         background_tasks.add_task(
@@ -92,8 +104,8 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
         }
 
     except Exception as e:
-        print("🔓 Releasing Execution Lock (Error during setup)")
-        session_state.EXECUTION_LOCK = False
+        print("🔓 Setup failed, releasing state")
+        app_state.clear_session(run_id) 
         
         import traceback
         traceback.print_exc()
@@ -103,9 +115,12 @@ async def execute_graph(payload: GraphExecutionPayload, background_tasks: Backgr
 
 
 @router.post("/execute/stop/{run_id}")
-def stop_execution(run_id: str):
-    success = session_state.stop_session(run_id)
+async def stop_execution(run_id: str):
+    if app_state.current_run_id != run_id:
+        return {"message": "Run already finished or ID mismatch"}
+
+    success = app_state.stop_current_session()
     if success:
-        return {"message": f"Stop signal sent to run {run_id}"}
+        return {"message": "Stop signal sent to trainer"}
     else:
-        return {"message": "Run not found or already finished", "warning": True}
+        raise HTTPException(status_code=404, detail="No active trainer found")

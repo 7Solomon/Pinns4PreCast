@@ -2,7 +2,7 @@ import lightning.pytorch as pl
 
 from typing import Dict, Any, List
 
-from src.node_system.session import register_session, unregister_session
+from src.state import app_state
 from src.node_system.configs.training import TrainingConfig
 from src.node_system.core import Node, Port, PortType, NodeMetadata, register_node
 
@@ -79,7 +79,7 @@ class LightningTrainerNode(Node):
             enable_progress_bar=False,
         )
 
-        register_session(run_id, trainer)
+        app_state.update_session_trainer(run_id, trainer)
 
         print(f"[Trainer] Starting fit for {t_cfg.max_epochs} epochs...")
         try:
@@ -90,7 +90,7 @@ class LightningTrainerNode(Node):
                 val_dataloaders=val_loader
             )
         finally:
-            unregister_session(run_id)
+            app_state.clear_session(run_id)
 
         # Retrieve best checkpoint if available
         best_path = ""
