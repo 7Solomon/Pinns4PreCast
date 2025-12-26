@@ -23,7 +23,7 @@ The editor starts as a clean slate where you can begin composing your experiment
 
 
 ### 2. Node Selection & Graph Design
-Construct your pipeline by dragging nodes from the sidebar registry. Nodes are categorized by function (Data Loading, Model Architecture, Training Config, etc.).
+Construct your pipeline by clicking on nodes in the sidebar registry. Nodes are categorized by function (Data Loading, Model Architecture, Training Config, etc.).
 
 <img src="assets/node_selection.png" width="200" alt="Node Selection">
 
@@ -33,7 +33,7 @@ Connect nodes to define the flow of data and configuration. This example shows a
 <img src="assets/training_tree.png" width="600" alt="Training Tree">
 
 ### 4. Configuration Management
-Click on any **Config Node** to open the inspector form. Here you can fine-tune hyperparameters, file paths, and physical constants without touching code.
+Click on any **Config Node** to open the inspector form. Here you can fine-tune hyperparameters, file paths, and physical constants without touching the code.
 
 <img src="assets/config_edit.png" width="300" alt= "Configs">
 
@@ -54,7 +54,7 @@ The Load dialog allows you to browse saved graphs, viewing metadata like tags an
 Switch to the **Monitor Tab** to watch your training in action.
 *   **Active Runs:** See currently executing jobs with live status indicators.
 *   **History:** Browse metrics from past completed runs.
-*   **Visualizations:** View live Loss Curves and Sensor Data heatmaps (updated via WebSockets).
+*   **Visualizations:** View live Loss Curves and Sensor Data (updated via WebSockets).
 
 <img src="assets/monitoring_tab.png" width="600" alt="Monitoring Tab">
 
@@ -115,7 +115,7 @@ Right-click `start.ps1` and select "Run with PowerShell", or run via terminal:
 
 *The application will launch at:*
 *   **Frontend:** `http://localhost:3000`
-*   **Backend API:** `http://localhost:8000/docs`
+*   **Backend API:** `http://localhost:8000`
 
 ---
 
