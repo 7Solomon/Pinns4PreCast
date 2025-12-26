@@ -177,8 +177,6 @@ class VisualizationCallback(Callback):
         
         return recharts_data
 
-        
-
     
     def _publish_event(self, data: dict):
         """Publish sensor data update event"""

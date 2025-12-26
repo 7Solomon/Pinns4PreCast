@@ -17,6 +17,8 @@ class EventType(str, Enum):
     CHECKPOINT_SAVED = "checkpoint_saved"
     RUN_STATUS_CHANGED = "run_status_changed"
 
+    CENTER_PROBE_DATA = "center_proble_data"
+
 
 @dataclass
 class Event:
