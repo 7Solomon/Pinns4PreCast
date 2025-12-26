@@ -55,6 +55,7 @@ Switch to the **Monitor Tab** to watch your training in action.
 *   **Active Runs:** See currently executing jobs with live status indicators.
 *   **History:** Browse metrics from past completed runs.
 *   **Visualizations:** View live Loss Curves and Sensor Data heatmaps (updated via WebSockets).
+
 <img src="assets/monitoring_tab.png" width="400" alt="Monitoring Tab">
 
 
