@@ -22,7 +22,7 @@ The editor starts as a clean slate where you can begin composing your experiment
 
 ### 2. Node Selection & Graph Design
 Construct your pipeline by dragging nodes from the sidebar registry. Nodes are categorized by function (Data Loading, Model Architecture, Training Config, etc.).
-![Node Selection](assets/node_selection.png)
+
 
 ### 3. Constructing a Training Tree
 Connect nodes to define the flow of data and configuration. This example shows a complete training tree setup for a simulation, linking inputs to models and loggers.
@@ -30,15 +30,18 @@ Connect nodes to define the flow of data and configuration. This example shows a
 
 ### 4. Configuration Management
 Click on any **Config Node** to open the inspector form. Here you can fine-tune hyperparameters, file paths, and physical constants without touching code.
-![Config Edit](assets/config_edit.png)
+<img src="assets/config_edit.png" width="200">
+
 
 ### 5. Project Controls
 Use the control panel to **Run** simulations, **Save** your current graph to the database, or **Load** previous experiments. The system handles background execution locks to prevent conflicts.
-![Option Buttons](assets/option_buttons.png)
+<img src="assets/option_buttons.png" width="200">
+
 
 ### 6. Loading Experiments
 The Load dialog allows you to browse saved graphs, viewing metadata like tags and descriptions before importing them into the canvas.
-![Loading Screen](assets/loading_screen.png)
+<img src="assets/loading_screen.png" width="500">
+
 
 ### 7. Real-Time Monitoring
 Switch to the **Monitor Tab** to watch your training in action.
@@ -111,11 +114,14 @@ Right-click `start.ps1` and select "Run with PowerShell", or run via terminal:
 If you prefer running services separately for debugging:
 
 **Backend:**
+```
 conda activate pinns4preCastNodes
 python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-
+```
 
 **Frontend:**
+```
 cd frontend
 npm install # Only needed the first time
 npm run dev
+```
