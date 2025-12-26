@@ -102,9 +102,8 @@ class CenterProbeNode(Node):
     @classmethod
     def get_input_ports(cls):
         return [
-            Port("domain", PortType.CONFIG),
-            Port("material", PortType.CONFIG),
-            Port("scales_config", PortType.CONFIG),
+            Port("domain", PortType.DOMAIN),
+            Port("material", PortType.MATERIAL),
         ]
 
     @classmethod
