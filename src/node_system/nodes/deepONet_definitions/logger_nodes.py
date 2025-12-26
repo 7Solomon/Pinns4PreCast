@@ -182,7 +182,7 @@ class DashboardLogger(Logger):
     @rank_zero_only
     def finalize(self, status):
         self._update_status(status)
-        
+        print("completed? :", status)
         # Publish completion event
         event_type = EventType.TRAINING_COMPLETED if status == "completed" else EventType.TRAINING_STOPPED
         self._publish_event(event_type, {"status": status})

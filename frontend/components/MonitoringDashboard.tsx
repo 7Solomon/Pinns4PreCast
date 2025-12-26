@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Activity, Database, TrendingUp, Clock, Zap, Eye } from 'lucide-react';
 import { useMonitoringWebSocket } from '@/hooks/useMonitoringWebSocket';
 import LossChart from './monitoring/LossCurve';
@@ -18,6 +18,15 @@ export default function MonitoringDashboard() {
     const [metricsData, setMetricsData] = useState<any[]>([]);
     const [latestSensorData, setLatestSensorData] = useState<SensorData | null>(null);
 
+    // 1. Determine status
+    const selectedRunStatus = useMemo(() =>
+        runs.find(r => r.run_id === selectedRun)?.status,
+        [runs, selectedRun]
+    );
+
+    // Only consider it "active" if we know for sure it is running or initialized
+    const isRunActive = selectedRunStatus === 'running' || selectedRunStatus === 'initialized';
+
     const handleSensorUpdate = useCallback((data: any) => {
         console.log('Sensor update:', data);
         setLatestSensorData(data);
@@ -25,25 +34,25 @@ export default function MonitoringDashboard() {
 
     const handleStatusChange = useCallback((status: string) => {
         console.log('Status:', status);
-    }, []);
+        // Optional: Update the local runs list if status changes
+        setRuns(prev => prev.map(r =>
+            r.run_id === selectedRun ? { ...r, status } : r
+        ));
+    }, [selectedRun]);
 
     const handleMetricsChange = useCallback((incomingData: any) => {
         setMetricsData(prev => {
-            // 1. Normalize everything to an array
             const newPoints = Array.isArray(incomingData) ? incomingData : [incomingData];
-
             if (newPoints.length === 0) return prev;
 
-            // 2. Performance Optimization: If we have no data yet, just set it
+            // Optimization: If empty, just set it (also handles the HTTP fetch case perfectly)
             if (prev.length === 0) {
                 return newPoints.sort((a: any, b: any) => a.step - b.step);
             }
 
             const dataMap = new Map(prev.map((p: any) => [p.step, p]));
-
             let hasChanges = false;
             newPoints.forEach((p: any) => {
-                // Only update if the point is new or different
                 if (!dataMap.has(p.step)) {
                     dataMap.set(p.step, p);
                     hasChanges = true;
@@ -51,43 +60,47 @@ export default function MonitoringDashboard() {
             });
 
             if (!hasChanges) return prev;
-
-            // 4. Return sorted array
             return Array.from(dataMap.values()).sort((a: any, b: any) => a.step - b.step);
         });
     }, []);
 
-
-    const { isConnected, disconnect } = useMonitoringWebSocket({
-        runId: selectedRun || null,
+    const { isConnected } = useMonitoringWebSocket({
+        runId: isRunActive ? selectedRun : null, // Passed null to disable WS for history
         onMetricsUpdate: handleMetricsChange,
         onSensorUpdate: handleSensorUpdate,
         onStatusChange: handleStatusChange
     });
 
     // Fetch available runs on mount
-    React.useEffect(() => {
+    useEffect(() => {
         fetch('http://localhost:8000/monitor/runs')
             .then(res => res.json())
             .then(data => setRuns(data.runs || []))
             .catch(err => console.error('Failed to fetch runs:', err));
     }, []);
 
-    const activeRuns = useMemo(() =>
-        runs.filter(r => r.status === 'running'),
-        [runs]
-    );
+    // Clears data immediately when run changes (prevents flashing)
+    useEffect(() => {
+        setMetricsData([]);
+        setLatestSensorData(null);
+    }, [selectedRun]);
 
-    const initializedRuns = useMemo(() =>
-        runs.filter(r => r.status === 'initialized'),
-        [runs]
-    );
+    useEffect(() => {
+        if (selectedRun && !isRunActive && selectedRunStatus) {
+            console.log(`📡 Fetching historical data for ${selectedRun} via HTTP...`);
 
+            fetch(`http://localhost:8000/monitor/history/${selectedRun}`)
+                .then(res => res.json())
+                .then(data => {
+                    handleMetricsChange(data);
+                })
+                .catch(err => console.error("Failed to load history:", err));
+        }
+    }, [selectedRun, isRunActive, selectedRunStatus, handleMetricsChange]);
 
-    const completedRuns = useMemo(() =>
-        runs.filter(r => r.status === 'completed'),
-        [runs]
-    );
+    const activeRuns = useMemo(() => runs.filter(r => r.status === 'running'), [runs]);
+    const completedRuns = useMemo(() => runs.filter(r => r.status === 'success' || r.status === 'stopped'), [runs]);
+
 
     return (
         <div className="w-full h-screen bg-slate-950 flex overflow-hidden">
@@ -101,39 +114,26 @@ export default function MonitoringDashboard() {
                     <p className="text-xs text-slate-500">View any training run</p>
                 </div>
 
-                {/* Active Runs */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    {/* Active Runs */}
                     {activeRuns.length > 0 && (
                         <div className="p-3">
                             <h3 className="text-xs font-bold text-emerald-400 uppercase mb-2 flex items-center gap-2">
-                                <Zap size={12} />
-                                Active ({activeRuns.length})
+                                <Zap size={12} /> Active ({activeRuns.length})
                             </h3>
                             {activeRuns.map(run => (
-                                <RunCard
-                                    key={run.run_id}
-                                    run={run}
-                                    isSelected={selectedRun === run.run_id}
-                                    onClick={() => setSelectedRun(run.run_id)}
-                                />
+                                <RunCard key={run.run_id} run={run} isSelected={selectedRun === run.run_id} onClick={() => setSelectedRun(run.run_id)} />
                             ))}
                         </div>
                     )}
-
                     {/* Completed Runs */}
                     {completedRuns.length > 0 && (
                         <div className="p-3">
                             <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
-                                <Database size={12} />
-                                History ({completedRuns.length})
+                                <Database size={12} /> History ({completedRuns.length})
                             </h3>
                             {completedRuns.map(run => (
-                                <RunCard
-                                    key={run.run_id}
-                                    run={run}
-                                    isSelected={selectedRun === run.run_id}
-                                    onClick={() => setSelectedRun(run.run_id)}
-                                />
+                                <RunCard key={run.run_id} run={run} isSelected={selectedRun === run.run_id} onClick={() => setSelectedRun(run.run_id)} />
                             ))}
                         </div>
                     )}
