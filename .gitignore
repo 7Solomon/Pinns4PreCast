@@ -10,7 +10,6 @@ package-lock.json
 .current_state.json
 
 
-
 # --- FRONTEND  ---
 frontend/node_modules/
 frontend/.next/

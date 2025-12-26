@@ -1,0 +1,43 @@
+name: pinns4preCastNodes
+channels:
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  # 1. Base Python
+  - python=3.9
+  - pip
+
+  # 2. PyTorch 2.4 with CUDA 12.1
+  - pytorch=2.4.1
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+
+  # 3. Pip Packages
+  - pip:
+    # --- Backend ---
+    - fastapi==0.124.4
+    - uvicorn[standard]==0.33.0
+    - websockets==13.1
+    - python-multipart
+    - python-dotenv==1.0.1
+    - requests==2.22.0
+
+    # --- Data & Math ---
+    - numpy==1.22.0
+    - pandas==2.0.3
+    - scipy==1.6.2
+    - matplotlib==3.4.1
+    - networkx==3.1
+
+    # --- PINNs & ML ---
+    - lightning==2.3.3
+    - torchmetrics==1.5.2
+    - pina-mathlab==0.2.0
+    - torch-geometric==2.6.1
+
+    # --- Utils ---
+    - pydantic==2.10.6
+    - tqdm==4.67.1
+    - fsspec

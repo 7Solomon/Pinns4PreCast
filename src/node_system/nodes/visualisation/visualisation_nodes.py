@@ -93,7 +93,6 @@ class VisualizationCallback(Callback):
         pl_module.eval()
 
         with torch.no_grad():
-            # ✅ YOUR EXISTING INFERENCE - PERFECT!
             from src.node_system.nodes.data.function_definitions import DeepONetDataset
             from src.node_system.nodes.visualisation.export_sensors import export_sensors_to_csv
             
@@ -183,6 +182,7 @@ class VisualizationCallback(Callback):
     
     def _publish_event(self, data: dict):
         """Publish sensor data update event"""
+        print(f"publish SENSOR: {data}")
         event = Event(
             type=EventType.SENSOR_DATA_UPDATED,
             run_id=self.run_id,
