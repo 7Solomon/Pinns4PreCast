@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import inspect
 from pydantic import BaseModel, Field as PydanticField
+from src.node_system.errors import MissingInputError, NodeExecutionError
 
 
 class PortType(str, Enum):
@@ -85,7 +86,7 @@ class Node(ABC):
     
     @classmethod
     @abstractmethod
-    def get_input_ports(cls) -> List[Port]:
+    def get_input_ports(cls) -> List[Port] | Dict[str, Port]:
         """Define what inputs this node accepts."""
         pass
     
@@ -121,6 +122,25 @@ class Node(ABC):
         """Set an input value."""
         self.inputs[port_name] = value
         self._executed = False
+        
+    def validate_inputs(self):
+        """Check if all required inputs are present before execution."""
+        input_ports = self.get_input_ports()
+        
+        if isinstance(input_ports, dict): 
+            for key, port in input_ports.items():
+                if port.required:
+                    if key not in self.inputs or self.inputs[key] is None:
+                        raise MissingInputError(f"Missing required input for port: '{port.name}'")
+        elif isinstance(input_ports, list):
+            for port in input_ports:
+                if port.required:
+                    if port.name not in self.inputs or self.inputs[port.name] is None:
+                        raise MissingInputError(f"Missing required input for port: '{port.name}'")
+        else:
+            # Fallback or error if get_input_ports returns something weird
+            raise ValueError(f"UNEXPECTED PORT TYPE: {type(input_ports)}")
+
 
     def process(self) -> Dict[str, Any]:
         """
@@ -128,6 +148,7 @@ class Node(ABC):
         Handles state checking and caching automatically.
         """
         if not self._executed:
+            self.validate_inputs()
             self.outputs = self.execute()
             self._executed = True
         return self.outputs
@@ -285,7 +306,11 @@ class NodeGraph:
         
         return order
     
-    def execute(self, output_node: str = None, output_port: str = None, context: Dict[str, Any] = None) -> Any:
+    def execute(self, output_node: str = None, 
+                output_port: str = None,
+                context: Dict[str, Any] = None,
+                status_callback: Callable[[str, str, Optional[str]], None] = None
+                ) -> Any:
         """
         Execute the graph.
         
@@ -294,27 +319,42 @@ class NodeGraph:
             output_port: Port to retrieve from output_node
         """
         execution_order = self._build_execution_order()
-        
+        print(execution_order)
         # Execute each node in order
         for node_id in execution_order:
             node = self.nodes[node_id]
-
-            # Global context
+      
             if context:
                 node.context = context
-            
-            # Set inputs from connections
-            for conn in self.connections:
-                if conn.to_node == node_id:
-                    from_node = self.nodes[conn.from_node]
-                    value = from_node.get_output(conn.from_port)
-                    node.set_input(conn.to_port, value)
-            
-            # Execute node
-            #node.execute()
-            node.process() # M
-        #print(output_node)
-        # Return requested output
+                
+            # 1. Notify Start
+            if status_callback:
+                status_callback(node_id, "running", None)
+
+            try:
+                # Set inputs
+                for conn in self.connections:
+                    if conn.to_node == node_id:
+                        from_node = self.nodes[conn.from_node]
+                        val = from_node.get_output(conn.from_port)
+                        node.set_input(conn.to_port, val)
+                
+                # 2. Execute
+                node.process()
+                
+                # 3. Notify Success
+                if status_callback:
+                    status_callback(node_id, "completed", None)
+
+            except Exception as e:
+                # 4. Notify Error and Re-raise with context
+                error_msg = str(e)
+                if status_callback:
+                    status_callback(node_id, "error", error_msg)
+                
+                if isinstance(e, (MissingInputError, ValueError, TypeError, KeyError)):
+                    raise NodeExecutionError(node_id, node.__class__.__name__, e)
+                raise e  # Re-raise unexpected errors
         if output_node:
             return self.nodes[output_node].get_output(output_port)
         

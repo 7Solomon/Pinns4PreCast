@@ -36,76 +36,60 @@ def get_node_registry():
 
     return registry_data
 
+
 @router.post("/execute")
 async def execute_graph(payload: GraphExecutionPayload, background_tasks: BackgroundTasks):
     
+    # 1. Quick Check (Fast fail)
     if session_state.EXECUTION_LOCK:
-        raise HTTPException(status_code=409, detail="A training session is already running/queued.")
-    print("🔒 Acquiring Execution Lock")
-    session_state.EXECUTION_LOCK = True
+        raise HTTPException(status_code=409, detail="Session running.")
 
-    try:
-        print(f"Received execution request...")
-        run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        print(f"Assigning Run ID: {run_id}")
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    global_context = {"run_id": run_id}
 
-        global_context = {
-            "run_id": run_id,
-        }
+    def run_pipeline_safely():
+        try:
+            with session_state.execution_lock_guard():
+                
+                graph = NodeGraph()
+                
+                # Callback to update global state
+                def status_cb(node_id, status, error=None):
+                    session_state.update_node_status(run_id, node_id, status, error)
 
-        # BUILD GRAPH
-        graph = NodeGraph()
+                # Add nodes/connections (same as before)
+                for n in payload.nodes:
+                    graph.add_node(n.type, n.id, n.config)
+                for c in payload.connections:
+                    graph.connect(c.source_node, c.source_port, c.target_node, c.target_port)
+
+                # Execute
+                graph.execute(
+                    output_node=payload.target_node_id,
+                    context=global_context,
+                    status_callback=status_cb
+                )
         
-        for n in payload.nodes:
-            try:
-                graph.add_node(node_type=n.type, node_id=n.id, config=n.config)
-            except ValueError as e:
-                print(f"Warning: Skipping unknown node type '{n.type}': {e}")
-                continue
+        except RuntimeError as lock_err:
+            print(f"Skipped run: {lock_err}")
+        except Exception as e:
+            print(f"CRITICAL GRAPH FAILURE: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Clean up stop flags
+            session_state.clear_stop_request(run_id)
 
-        for c in payload.connections:
-            try:
-                graph.connect(c.source_node, c.source_port, c.target_node, c.target_port)
-            except ValueError as e:
-                print(f"Warning: Connection failed: {e}")
+    # 3. Dispatch
+    background_tasks.add_task(run_pipeline_safely)
 
-        # DEFINE WRAPPER
-        def protected_execute(*args, **kwargs):
-            try:
-                graph.execute(*args, **kwargs)
-            finally:
-                print("🔓 Releasing Execution Lock (Task Finished)")
-                session_state.EXECUTION_LOCK = False
-
-        # FIRE AND FORGET
-        background_tasks.add_task(
-            protected_execute, 
-            output_node=payload.target_node_id, 
-            context=global_context
-        )
-
-        return {
-            "status": "started",
-            "message": "Graph started in background",
-            "run_id": run_id, 
-            "widgets": []
-        }
-
-    except Exception as e:
-        print("🔓 Releasing Execution Lock (Error during setup)")
-        session_state.EXECUTION_LOCK = False
-        
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
+    return {
+        "status": "started",
+        "run_id": run_id, 
+        "message": "Graph started in background"
+    }
 
 @router.post("/execute/stop/{run_id}")
 def stop_execution(run_id: str):
-    success = session_state.stop_session(run_id)
-    if success:
-        return {"message": f"Stop signal sent to run {run_id}"}
-    else:
-        return {"message": "Run not found or already finished", "warning": True}
+    session_state.request_stop(run_id)
+    return {"message": f"Stop requested for {run_id}"}

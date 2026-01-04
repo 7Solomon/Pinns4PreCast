@@ -8,6 +8,7 @@ package-lock.json
 
 .vscode/
 .current_state.json
+src/.venv
 
 
 

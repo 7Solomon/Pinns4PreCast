@@ -21,6 +21,15 @@ export const useFlowEditor = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
+    const [errorModal, setErrorModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        nodeId: ''
+    });
+    const closeErrorModal = () => setErrorModal(prev => ({ ...prev, isOpen: false }));
+
+
     // Load Registry
     useEffect(() => {
         axios.get<NodeData[]>('http://localhost:8000/registry')
@@ -88,6 +97,7 @@ export const useFlowEditor = () => {
 
         setIsRunning(true);
         setCurrentRunId(null); // Reset previous run
+        setErrorModal(prev => ({ ...prev, isOpen: false }));
 
         const payload = {
             nodes: nodes.map(n => ({
@@ -118,7 +128,12 @@ export const useFlowEditor = () => {
             console.log(`Started Run ID: ${runId}`);
 
         } catch (e: any) {
-            alert(`Error: ${e.response?.data?.detail || e.message}`);
+            setErrorModal({
+                isOpen: true,
+                title: "Failed to Start Session",
+                message: e.response?.data?.detail || e.message,
+                nodeId: ""
+            });
             setIsRunning(false);
         }
     };
@@ -272,10 +287,12 @@ export const useFlowEditor = () => {
         addNode,
         clearGraph,
         runSimulation,
+        errorModal,
+        closeErrorModal,
         stopSimulation,
         saveGraph,
         loadGraph,
-        setNodes, // exposed in case you need direct access
+        setNodes,
         setEdges
     };
 };
