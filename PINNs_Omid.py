@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 import torch
+import pandas as pd
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -25,6 +26,17 @@ T_data_K = [
     297.95, 297.15, 296.45, 295.85, 295.35, 294.95, 294.65
 ]
 
+# Plot and save temperature data
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.plot(t_data_h, T_data_K, 'o-', label='Temperature data')
+ax.set_xlabel('Time [h]')
+ax.set_ylabel('Temperature [K]')
+ax.set_title('Injected Temperature Data')
+ax.grid(True, alpha=0.3)
+ax.legend()
+plt.tight_layout()
+plt.savefig('temperature_data.png', dpi=200)
+plt.close(fig)
 
 # ---- Plot helpers (fixed to match training scaling + single model) ----
 def make_t_plot(dom, n=300, device="cpu"):
@@ -280,6 +292,108 @@ def laplacian(u, x):
     uzz = grad(uz, x, 2)
     return uxx + uyy + uzz
 
+def save_full_field_on_grid(
+    model, dom, scales, mat,
+    dx=0.04, dy=0.04, dz=0.04,
+    t_hours=None,
+    out_csv="field_full.csv",
+    device="cpu",
+    batch_size=200_000,
+):
+    """
+    Saves T [K], alpha [-], q [W/m^3] on a structured space-time grid to CSV.
+
+    - Spatial grid includes endpoints (x0..x1 etc.)
+    - Time grid taken from t_hours (in hours). If None, uses 0..24 with 25 steps.
+    - q is computed from autograd: q = Q_pot * cem * d(alpha)/dt   (t in seconds)
+    """
+
+    import numpy as np
+    import pandas as pd
+    import torch
+
+    model.eval()
+
+    # ---- Time grid ----
+    if t_hours is None:
+        t_hours = np.arange(0.0, 25.0, 1.0)  # 0..24 inclusive (25 points)
+    t_s = torch.tensor(t_hours, device=device, dtype=torch.float32).view(-1, 1) * 3600.0
+    nt = t_s.shape[0]
+
+    # ---- Spatial grids (include endpoints) ----
+    nx = int(round((dom.x1 - dom.x0) / dx)) + 1
+    ny = int(round((dom.y1 - dom.y0) / dy)) + 1
+    nz = int(round((dom.z1 - dom.z0) / dz)) + 1
+
+    x = torch.linspace(dom.x0, dom.x1, nx, device=device)
+    y = torch.linspace(dom.y0, dom.y1, ny, device=device)
+    z = torch.linspace(dom.z0, dom.z1, nz, device=device)
+
+    # Full 4D mesh (flattened)
+    X, Y, Z, Tt = torch.meshgrid(x, y, z, t_s.view(-1), indexing="ij")
+    Xf = X.reshape(-1, 1)
+    Yf = Y.reshape(-1, 1)
+    Zf = Z.reshape(-1, 1)
+    Tf = Tt.reshape(-1, 1)
+
+    N = Xf.shape[0]
+
+    # Output buffers on CPU
+    x_out = np.empty((N,), dtype=np.float32)
+    y_out = np.empty((N,), dtype=np.float32)
+    z_out = np.empty((N,), dtype=np.float32)
+    t_out = np.empty((N,), dtype=np.float32)
+
+    T_out = np.empty((N,), dtype=np.float32)
+    a_out = np.empty((N,), dtype=np.float32)
+    q_out = np.empty((N,), dtype=np.float32)
+
+    # Batch evaluation
+    for i0 in range(0, N, batch_size):
+        i1 = min(i0 + batch_size, N)
+
+        xyzt_phys = torch.cat([Xf[i0:i1], Yf[i0:i1], Zf[i0:i1], Tf[i0:i1]], dim=1)
+        xyzt_phys = xyzt_phys.requires_grad_(True)
+
+        xyzt_scaled = scale_domain(xyzt_phys, dom)
+        pred = model(xyzt_scaled)
+
+        T_s_pred = pred[:, 0:1]
+        alpha = pred[:, 1:2]
+        T_K = unscale_T(T_s_pred, scales)
+
+        # d alpha / dt (seconds)
+        dalpha_dt = torch.autograd.grad(
+            alpha, xyzt_phys,
+            grad_outputs=torch.ones_like(alpha),
+            retain_graph=False,
+            create_graph=False
+        )[0][:, 3:4]
+
+        q = mat.Q_pot * mat.cem * dalpha_dt  # [W/m^3]
+
+        # Store coords + fields
+        x_out[i0:i1] = xyzt_phys[:, 0].detach().cpu().numpy()
+        y_out[i0:i1] = xyzt_phys[:, 1].detach().cpu().numpy()
+        z_out[i0:i1] = xyzt_phys[:, 2].detach().cpu().numpy()
+        t_out[i0:i1] = (xyzt_phys[:, 3].detach().cpu().numpy() / 3600.0)  # hours
+
+        T_out[i0:i1] = T_K.detach().cpu().numpy().reshape(-1)
+        a_out[i0:i1] = alpha.detach().cpu().numpy().reshape(-1)
+        q_out[i0:i1] = q.detach().cpu().numpy().reshape(-1)
+
+    df = pd.DataFrame({
+        "x": x_out,
+        "y": y_out,
+        "z": z_out,
+        "t_h": t_out,
+        "T_K": T_out,
+        "alpha": a_out,
+        "q_Wm3": q_out,
+    })
+
+    df.to_csv(out_csv, index=False)
+    print(f"[saved] {out_csv}  (rows={len(df)}, nx={nx}, ny={ny}, nz={nz}, nt={nt})")
 
 # ---------------------------
 # Main training
@@ -290,7 +404,7 @@ def main(
     T_ic_K=298.15,
     T_bc_K=298.15,
     alpha_ic=1e-6,
-    steps=100000,
+    steps=1000,
     lr=1e-4,
     N_pde=5000,
     N_ic=2000,
@@ -413,13 +527,13 @@ def main(
         loss.backward()
         opt.step()
 
-        if it % 200 == 0:
+        if it % 500 == 0:
             with torch.no_grad():
                 a_min = float(alpha.min().cpu())
                 a_max = float(alpha.max().cpu())
                 print(
                     f"iter {it:6d} | loss {loss.item():.3e} "
-                    f"| phys {loss_phys.item():.3e} ic {loss_ic.item():.3e} bc {loss_bc.item():.3e} "
+                    f"| phys {loss_phys.item():.3e} ic {loss_ic.item():.3e} bc {loss_bc.item():.3e} dataT {loss_data_T.item():.3e} "
                     f"| alpha[pde] in [{a_min:.3e},{a_max:.3e}]"
                 )
 
@@ -432,9 +546,11 @@ def main(
 
             fig, axs = plt.subplots(3, 1, figsize=(6, 8), sharex=True)
 
-            axs[0].plot(t_h, T_c)
+            axs[0].plot(t_h, T_c, label='Predicted T [K]')
+            axs[0].plot(t_data_h, T_data_K, 'r--', label='Injected T [K]')  # Dotted line for injected data
             axs[0].set_ylabel("T [K]")
             axs[0].set_title(f"Center evolution (iter {it})")
+            axs[0].legend()
 
             axs[1].plot(t_h, alpha_c)
             axs[1].set_ylabel(r"$\alpha$")
@@ -449,6 +565,32 @@ def main(
     # After training you can probe sensor curves by evaluating model at sensor coords over time.
     print("Done.")
 
+        # ---- NEW: Save full space-time fields on a 0.04 m grid and 25 hourly steps (0..24 h) ----
+    save_full_field_on_grid(
+        model=model, dom=dom, scales=scales, mat=mat,
+        dx=0.04, dy=0.04, dz=0.04,
+        t_hours=list(range(0, 25)),          # 25 steps: 0..24 h
+        out_csv="field_full.csv",
+        device=device,
+        batch_size=200_000,                 # 63,525 points -> one batch is fine
+    )
+
+
+    # print(f"Size of t_h: {t_h.shape}")
+    # print(f"Size of T_c: {T_c.shape}")
+    # print(f"Size of alpha_c: {alpha_c.shape}")
+    # print(f"Size of q_c: {q_c.shape}")
+
+    # Save results to CSV
+    results = pd.DataFrame({
+    "t_h": t_h.squeeze(),
+    "T_c": T_c.squeeze(),
+    "alpha_c": alpha_c.squeeze(),
+    "q_c": q_c.squeeze(),
+    })
+
+    results.to_csv('center_evolution_results.csv', index=False)
+
 
 if __name__ == "__main__":
     # Set BC/IC in Kelvin for this debug run:
@@ -459,7 +601,7 @@ if __name__ == "__main__":
         T_ic_K=298.15,                 # 25C
         T_bc_K=293.15,                 # 20C (recommended debug)
         alpha_ic=1e-6,
-        steps=100000,
+        steps=60000,
         lr=1e-4,
         N_pde=5000,
         N_ic=2000,
