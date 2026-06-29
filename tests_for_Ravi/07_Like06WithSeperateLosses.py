@@ -328,27 +328,32 @@ def hydration_rate(alpha: torch.Tensor, T: torch.Tensor, mat: Material) -> torch
 # ---------------------------
 # PINN model
 # ---------------------------
-# class PINN(nn.Module):
-#     def __init__(self, in_dim=3, hidden=256, depth=4, alpha_max=0.875):
-#         super().__init__()
-#         layers = []
-#         layers.append(nn.Linear(in_dim, hidden))
-#         layers.append(nn.Tanh())
-#         for _ in range(depth - 1):
-#             layers.append(nn.Linear(hidden, hidden))
-#             layers.append(nn.Tanh())
-#         layers.append(nn.Linear(hidden, 2))  # outputs: T_scaled, raw_alpha
-#         self.net = nn.Sequential(*layers)
-#         self.alpha_max = float(alpha_max)
 
-#     def forward(self, x):  # x: [N,3] scaled coords
-#         out = self.net(x)
-#         T_scaled = out[:, 0:1]
-#         raw_alpha = out[:, 1:2]
-#         alpha = self.alpha_max * torch.sigmoid(raw_alpha)  # enforce 0<=alpha<=alpha_max
-#         return torch.cat([T_scaled, alpha], dim=1)
+class PINN_T(nn.Module):
+    """
+    Temperature network: predicts only T_scaled.
+    """
+    def __init__(self, in_dim=3, hidden=256, depth=4):
+        super().__init__()
+        layers = []
+        layers.append(nn.Linear(in_dim, hidden))
+        layers.append(nn.Tanh())
+        for _ in range(depth - 1):
+            layers.append(nn.Linear(hidden, hidden))
+            layers.append(nn.Tanh())
+        layers.append(nn.Linear(hidden, 1))  # output: T_scaled
+        self.net = nn.Sequential(*layers)
 
-class PINN(nn.Module):
+    def forward(self, x):  # x: [N,3] scaled coords in [0,1]
+        T_scaled = self.net(x)
+        return T_scaled
+
+
+class PINN_alpha_sigmoid(nn.Module):
+    """
+    Alpha network (NON-monotone in time):
+    alpha = alpha_max * sigmoid(raw_alpha)  ->  0 <= alpha <= alpha_max
+    """
     def __init__(self, in_dim=3, hidden=256, depth=4, alpha_max=0.875):
         super().__init__()
         layers = []
@@ -357,28 +362,44 @@ class PINN(nn.Module):
         for _ in range(depth - 1):
             layers.append(nn.Linear(hidden, hidden))
             layers.append(nn.Tanh())
-        layers.append(nn.Linear(hidden, 2))  # outputs: T_scaled, raw_s
+        layers.append(nn.Linear(hidden, 1))  # output: raw_alpha
+        self.net = nn.Sequential(*layers)
+        self.alpha_max = float(alpha_max)
+
+    def forward(self, x):  # x: [N,3] scaled coords
+        raw_alpha = self.net(x)
+        alpha = self.alpha_max * torch.sigmoid(raw_alpha)  # enforce 0<=alpha<=alpha_max
+        return alpha
+
+
+class PINN_alpha_monotone(nn.Module):
+    """
+    Alpha network (monotone in time), your current design:
+    raw_rate -> rate = softplus(raw_rate) >= 0
+    s(ts) = rate * ts  (s(0)=0, nondecreasing in ts)
+    alpha = alpha_max * (1 - exp(-s))
+    """
+    def __init__(self, in_dim=3, hidden=256, depth=4, alpha_max=0.875):
+        super().__init__()
+        layers = []
+        layers.append(nn.Linear(in_dim, hidden))
+        layers.append(nn.Tanh())
+        for _ in range(depth - 1):
+            layers.append(nn.Linear(hidden, hidden))
+            layers.append(nn.Tanh())
+        layers.append(nn.Linear(hidden, 1))  # output: raw_rate
         self.net = nn.Sequential(*layers)
         self.alpha_max = float(alpha_max)
 
     def forward(self, x):  # x: [N,3] scaled coords in [0,1]
-        out = self.net(x)
-        T_scaled = out[:, 0:1]
+        raw_rate = self.net(x)
 
-        # --- Monotone hydration via s-field ---
-        # Use a nonnegative "rate" in scaled time and integrate analytically:
-        # s(ts) = softplus(raw_rate) * ts  ->  ds/dts >= 0  and s(0)=0
-        ts = x[:, 2:3]                    # scaled time in [0,1]
-        raw_rate = out[:, 1:2]
-        rate = F.softplus(raw_rate)       # >= 0
-        s = rate * ts                     # >= 0 and nondecreasing in ts
+        ts = x[:, 2:3]              # scaled time in [0,1]
+        rate = F.softplus(raw_rate) # >= 0
+        s = rate * ts               # >= 0 and nondecreasing in ts
 
-        # Map s -> alpha in [0, alpha_max), monotone in s (hence in time)
         alpha = self.alpha_max * (1.0 - torch.exp(-s))
-
-        return torch.cat([T_scaled, alpha], dim=1)
-
-
+        return alpha
 
 # # ---------------------------
 # # Sampling Monte Carlo points
@@ -419,6 +440,53 @@ class PINN(nn.Module):
 #     pts[face == 3, 1] = dom.y1
 
 #     return pts
+# def sample_boundary_convective(N, dom: Domain, device, return_face=False):
+#     """
+#     Sample N space–time points on the spatial boundary of the 2D domain
+#     for convective (Robin/Newton) temperature boundary condition.
+
+#     Returns
+#     -------
+#     pts : torch.Tensor, shape (N, 3)
+#         Physical boundary points [x, y, t] with t in seconds.
+#     n : torch.Tensor, shape (N, 2)
+#         Outward unit normals [nx, ny] at each boundary point.
+#     face : torch.Tensor, shape (N,)
+#         Optional integer face id in {0,1,2,3}:
+#           0: x=x0 (left), 1: x=x1 (right), 2: y=y0 (bottom), 3: y=y1 (top)
+#     """
+#     pts = sample_uniform(N, dom, device)
+
+#     # choose boundary edge for each point
+#     face = torch.randint(0, 4, (N,), device=device)
+
+#     # initialize normals
+#     n = torch.zeros((N, 2), device=device, dtype=pts.dtype)
+
+#     # left: x = x0, n = (-1, 0)
+#     m = (face == 0)
+#     pts[m, 0] = dom.x0
+#     n[m, 0] = -1.0
+
+#     # right: x = x1, n = (+1, 0)
+#     m = (face == 1)
+#     pts[m, 0] = dom.x1
+#     n[m, 0] = +1.0
+
+#     # bottom: y = y0, n = (0, -1)
+#     m = (face == 2)
+#     pts[m, 1] = dom.y0
+#     n[m, 1] = -1.0
+
+#     # top: y = y1, n = (0, +1)
+#     m = (face == 3)
+#     pts[m, 1] = dom.y1
+#     n[m, 1] = +1.0
+
+#     if return_face:
+#         return pts, n, face
+#     return pts, n
+
 
 ###### End of Sampling Monte Carlo points ######
 
@@ -499,54 +567,86 @@ def sample_boundary_dirichlet_T(N, dom: Domain, device):
         pts = pts[:N]
 
     return pts
-################# End of Sampling non-Monte Carlo points ##############
 
-def sample_boundary_convective(N, dom: Domain, device, return_face=False):
+
+def sample_boundary_convective_fixed(N, dom: Domain, device, return_face=False):
     """
-    Sample N space–time points on the spatial boundary of the 2D domain
-    for convective (Robin/Newton) temperature boundary condition.
+    Deterministic (grid-based) sampling of N space–time points on the
+    spatial boundary of the 2D domain for convective (Robin/Newton)
+    temperature boundary conditions.
 
     Returns
     -------
     pts : torch.Tensor, shape (N, 3)
-        Physical boundary points [x, y, t] with t in seconds.
+        Physical boundary points [x, y, t].
     n : torch.Tensor, shape (N, 2)
-        Outward unit normals [nx, ny] at each boundary point.
-    face : torch.Tensor, shape (N,)
-        Optional integer face id in {0,1,2,3}:
-          0: x=x0 (left), 1: x=x1 (right), 2: y=y0 (bottom), 3: y=y1 (top)
+        Outward unit normals [nx, ny].
+    face : torch.Tensor, shape (N,), optional
+        Face id in {0,1,2,3}:
+          0: x=x0 (left)
+          1: x=x1 (right)
+          2: y=y0 (bottom)
+          3: y=y1 (top)
     """
-    pts = sample_uniform(N, dom, device)
 
-    # choose boundary edge for each point
-    face = torch.randint(0, 4, (N,), device=device)
+    # points per face
+    Nf = N // 4
+    Nt = int(round((Nf) ** 0.5))
+    Nt = max(Nt, 2)
 
-    # initialize normals
-    n = torch.zeros((N, 2), device=device, dtype=pts.dtype)
+    # grids
+    x = torch.linspace(dom.x0, dom.x1, Nt, device=device)
+    y = torch.linspace(dom.y0, dom.y1, Nt, device=device)
+    t = torch.linspace(dom.t0, dom.t1, Nt, device=device)
 
-    # left: x = x0, n = (-1, 0)
-    m = (face == 0)
-    pts[m, 0] = dom.x0
-    n[m, 0] = -1.0
+    # ---- left boundary (x = x0) ----
+    Y, T = torch.meshgrid(y, t, indexing="ij")
+    left = torch.stack([
+        torch.full_like(Y.reshape(-1), dom.x0),
+        Y.reshape(-1),
+        T.reshape(-1)
+    ], dim=1)
+    n_left = torch.tensor([-1.0, 0.0], device=device).repeat(left.shape[0], 1)
+    f_left = torch.zeros(left.shape[0], device=device, dtype=torch.long)
 
-    # right: x = x1, n = (+1, 0)
-    m = (face == 1)
-    pts[m, 0] = dom.x1
-    n[m, 0] = +1.0
+    # ---- right boundary (x = x1) ----
+    right = left.clone()
+    right[:, 0] = dom.x1
+    n_right = torch.tensor([+1.0, 0.0], device=device).repeat(right.shape[0], 1)
+    f_right = torch.ones(right.shape[0], device=device, dtype=torch.long)
 
-    # bottom: y = y0, n = (0, -1)
-    m = (face == 2)
-    pts[m, 1] = dom.y0
-    n[m, 1] = -1.0
+    # ---- bottom boundary (y = y0) ----
+    X, T = torch.meshgrid(x, t, indexing="ij")
+    bottom = torch.stack([
+        X.reshape(-1),
+        torch.full_like(X.reshape(-1), dom.y0),
+        T.reshape(-1)
+    ], dim=1)
+    n_bottom = torch.tensor([0.0, -1.0], device=device).repeat(bottom.shape[0], 1)
+    f_bottom = torch.full((bottom.shape[0],), 2, device=device, dtype=torch.long)
 
-    # top: y = y1, n = (0, +1)
-    m = (face == 3)
-    pts[m, 1] = dom.y1
-    n[m, 1] = +1.0
+    # ---- top boundary (y = y1) ----
+    top = bottom.clone()
+    top[:, 1] = dom.y1
+    n_top = torch.tensor([0.0, +1.0], device=device).repeat(top.shape[0], 1)
+    f_top = torch.full((top.shape[0],), 3, device=device, dtype=torch.long)
+
+    # concatenate
+    pts = torch.cat([left, right, bottom, top], dim=0)
+    n = torch.cat([n_left, n_right, n_bottom, n_top], dim=0)
+    face = torch.cat([f_left, f_right, f_bottom, f_top], dim=0)
+
+    # trim if needed
+    if pts.shape[0] > N:
+        pts = pts[:N]
+        n = n[:N]
+        face = face[:N]
 
     if return_face:
         return pts, n, face
     return pts, n
+################# End of Sampling non-Monte Carlo points ##############
+
 
 
 # ---------------------------
@@ -590,7 +690,7 @@ def laplacian(u, x):
 
 
 def save_full_field_on_grid(
-    model, dom, scales, mat,
+    model_T, model_a, dom, scales, mat,
     dx=0.04, dy=0.04,
     x_vals=None, y_vals=None,   # <-- ADD THIS LINE
     t_hours=None,
@@ -610,7 +710,8 @@ def save_full_field_on_grid(
     import pandas as pd
     import torch
 
-    model.eval()
+    model_T.eval()
+    model_a.eval()
 
     # ---- Time grid ----
     if t_hours is None:
@@ -656,10 +757,9 @@ def save_full_field_on_grid(
         xyt_phys = torch.cat([Xf[i0:i1], Yf[i0:i1], Tf[i0:i1]], dim=1).requires_grad_(True)
 
         xyt_scaled = scale_domain(xyt_phys, dom)
-        pred = model(xyt_scaled)
 
-        T_s_pred = pred[:, 0:1]
-        alpha = pred[:, 1:2]
+        T_s_pred = model_T(xyt_scaled)
+        alpha = model_a(xyt_scaled)
         T_K = unscale_T(T_s_pred, scales)
 
         # d alpha / dt (seconds): time index is 2 in 2D input (x, y, t)
@@ -692,7 +792,6 @@ def save_full_field_on_grid(
 
     df.to_csv(out_csv, index=False)
     print(f"[saved] {out_csv}  (rows={len(df)}, nx={nx}, ny={ny}, nt={nt})")
-
 
 # ---------------------------
 # Main training
@@ -731,8 +830,14 @@ def main(
     T_data_s      = scale_T(T_data, scales)
 
 
-    model = PINN(alpha_max=mat.deg_hydr_max).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    # --- two separate networks (parallel) ---
+    model_T = PINN_T().to(device)
+
+    # pick ONE of the alpha models:
+    model_a = PINN_alpha_monotone(alpha_max=mat.deg_hydr_max).to(device)
+    # model_a = PINN_alpha_sigmoid(alpha_max=mat.deg_hydr_max).to(device)
+
+    opt = torch.optim.Adam(list(model_T.parameters()) + list(model_a.parameters()), lr=lr)
 
     # nondimensional coefficients consistent with slide form:
     # cp*rho*dT/dt = k*ΔT + Q_pot*cem*dalpha/dt
@@ -755,7 +860,8 @@ def main(
     # =========================
     it_hist = []
     loss_hist = []
-    phys_hist = []
+    phys_a_hist = []
+    phys_T_hist = []
     ic_hist = []
     bc_hist = []
     data_hist = []
@@ -767,7 +873,7 @@ def main(
         if BC == 'Dirichlet':
             bc_pts = sample_boundary_dirichlet_T(N_bc, dom, device)
         elif BC == 'Convective':
-            bc_pts, n_bc = sample_boundary_convective(N_bc, dom, device)  # n_bc: (N,2)
+            bc_pts, n_bc = sample_boundary_convective_fixed(N_bc, dom, device)  # n_bc: (N,2)
             bc_pts = bc_pts.requires_grad_(True)
 
         # scale inputs for NN
@@ -775,10 +881,9 @@ def main(
         ic_in = scale_domain(ic_pts, dom)
         bc_in = scale_domain(bc_pts, dom)
 
-        # ----- predictions
-        pred_pde = model(pde_in)
-        T_s = pred_pde[:, 0:1]
-        alpha = pred_pde[:, 1:2]
+        # ----- predictions (two separate networks)
+        T_s = model_T(pde_in)
+        alpha = model_a(pde_in)
 
         # unscale T for kinetics and PDE physical terms
         T_K = unscale_T(T_s, scales)
@@ -795,21 +900,23 @@ def main(
         lapT = laplacian(T_K, pde_pts)
         r_T = dTdt - kappa * lapT - beta * dalpha_dt
 
-        loss_phys = (r_T.pow(2).mean() + r_alpha.pow(2).mean())
+        loss_phys_T = (r_T.pow(2).mean()) 
+        loss_phys_a = (r_alpha.pow(2).mean()) 
 
         # ----- IC loss (T and alpha at t=0)
-        pred_ic = model(ic_in)
-        loss_ic_T = F.mse_loss(pred_ic[:, 0:1], T_ic_s.expand_as(pred_ic[:, 0:1]))
-        loss_ic_a = F.mse_loss(pred_ic[:, 1:2], alpha0.expand_as(pred_ic[:, 1:2]))
+        T_ic_pred_s = model_T(ic_in)
+        alpha_ic_pred = model_a(ic_in)
+        loss_ic_T = F.mse_loss(T_ic_pred_s, T_ic_s.expand_as(T_ic_pred_s))
+        loss_ic_a = F.mse_loss(alpha_ic_pred, alpha0.expand_as(alpha_ic_pred))
         loss_ic = loss_ic_T + loss_ic_a
 
         # ----- BC loss (Dirichlet T on boundary)
-        pred_bc = model(bc_in)
+        T_bc_pred_s = model_T(bc_in)
         if BC == 'Dirichlet':
-            loss_bc = F.mse_loss(pred_bc[:, 0:1], T_bc_s.expand_as(pred_bc[:, 0:1]))
+            loss_bc = F.mse_loss(T_bc_pred_s, T_bc_s.expand_as(T_bc_pred_s))
         elif BC == 'Convective':
             # IMPORTANT: use physical temperature for BC
-            Tbc_K = unscale_T(pred_bc[:, 0:1], scales)
+            Tbc_K = unscale_T(T_bc_pred_s, scales)
 
             # compute grad T wrt physical x,y
             Tx = grad(Tbc_K, bc_pts, 0)
@@ -825,20 +932,22 @@ def main(
             r_bc = (-mat.k) * dTdn - mat.h * (Tbc_K - Tinf)
 
             loss_bc = (r_bc.pow(2)).mean()
+
         # --- temperature data loss ---
-        pred_data = model(xyt_data_in)
-        loss_data_T = F.mse_loss(pred_data[:, 0:1], T_data_s)
+        T_data_pred_s = model_T(xyt_data_in)
+        loss_data_T = F.mse_loss(T_data_pred_s, T_data_s)
 
         # weights (tune these!)
-        w_phys, w_ic, w_bc, w_data = 1.0, 10.0, 1.0, 1.0
-        loss = w_phys * loss_phys + w_ic * loss_ic + w_bc * loss_bc + w_data * loss_data_T
+        w_a_phys, w_T_phys, w_ic, w_bc, w_data = 1.0, 1.0, 1.0, 1.0, 1.0
+        loss = w_a_phys * loss_phys_a + w_T_phys * loss_phys_T + w_ic * loss_ic + w_bc * loss_bc + w_data * loss_data_T
 
         # =========================
         # (B) Record losses
         # =========================
         it_hist.append(it)
+        phys_a_hist.append(float(loss_phys_a.detach().cpu()))
+        phys_T_hist.append(float(loss_phys_T.detach().cpu()))
         loss_hist.append(float(loss.detach().cpu()))
-        phys_hist.append(float(loss_phys.detach().cpu()))
         ic_hist.append(float(loss_ic.detach().cpu()))
         bc_hist.append(float(loss_bc.detach().cpu()))
         data_hist.append(float(loss_data_T.detach().cpu()))
@@ -853,7 +962,7 @@ def main(
                 a_max = float(alpha.max().cpu())
                 print(
                     f"iter {it:6d} | loss {loss.item():.3e} "
-                    f"| phys {loss_phys.item():.3e} ic {loss_ic.item():.3e} bc {loss_bc.item():.3e} "
+                    f"| phys_a {loss_phys_a.item():.3e} phys_T {loss_phys_T.item():.3e} ic {loss_ic.item():.3e} bc {loss_bc.item():.3e} "
                     f"| alpha[pde] in [{a_min:.3e},{a_max:.3e}]"
                 )
 
@@ -862,7 +971,8 @@ def main(
     # =========================
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.semilogy(it_hist, loss_hist, label="total")
-    ax.semilogy(it_hist, phys_hist, label="phys")
+    ax.semilogy(it_hist, phys_a_hist, label="phys_a")
+    ax.semilogy(it_hist, phys_T_hist, label="phys_T")
     ax.semilogy(it_hist, ic_hist, label="ic")
     ax.semilogy(it_hist, bc_hist, label="bc")
     ax.semilogy(it_hist, data_hist, label="data")
@@ -891,7 +1001,7 @@ def main(
 
     # ---- Save full space-time fields on a 2D grid and 25 hourly steps (0..24 h) ----
     save_full_field_on_grid(
-        model=model, dom=dom, scales=scales, mat=mat,
+        model_T=model_T, model_a=model_a, dom=dom, scales=scales, mat=mat,
         x_vals=x_vals_data, y_vals=y_vals_data,   # <-- ADD THIS
         t_hours=t_hours_data,                     # already correct
         out_csv="field_full.csv",
@@ -1000,6 +1110,7 @@ def main(
     )
 
 
+
     
 
 
@@ -1011,7 +1122,7 @@ if __name__ == "__main__":
         T_bc_K=293.15,                 # 20C (recommended debug)
         T_amb_K=293.15,               # 20C
         alpha_ic=1e-6,
-        steps=20000,
+        steps=40000,
         lr=1e-4,
         N_pde=15000,
         N_ic=6000,
